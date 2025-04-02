@@ -154,13 +154,13 @@ pub unsafe fn pointer_get_attribute<T>(
 pub unsafe fn pointer_get_attributes() {}
 
 pub unsafe fn pointer_set_attribute<T>(
-    value: *mut T,
+    value: *const T,
     attribute: PointerAttribute,
     device_ptr: DevicePtr,
 ) -> CudaResult<()> {
     unsafe {
         sys::cuPointerSetAttribute(
-            value as *mut std::ffi::c_void,
+            value as *const std::ffi::c_void,
             attribute.into(),
             device_ptr.0,
         )
