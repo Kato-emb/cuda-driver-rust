@@ -10,8 +10,9 @@ fn main() {
     {
         let cuda_include = std::env::var("CUDA_INCLUDE").unwrap_or(format!("{cuda_home}/include"));
         cuda_driver_api(&cuda_include);
-        println!("cargo:rustc-link-lib=dylib=cuda");
     }
+
+    println!("cargo:rustc-link-lib=dylib=cuda");
 }
 
 #[cfg(feature = "ffi")]
