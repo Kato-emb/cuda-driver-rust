@@ -5,6 +5,7 @@ authors = ["Ryohei Kato<r-kato@musen.co.jp>"]
 
 [workspace]
 resolver = "2"
-members = ["cuda-sys"]
+members = ["cuda", "cuda-sys"]
 
 [workspace.dependencies]
+cuda-sys = { path = "./cuda-sys" }

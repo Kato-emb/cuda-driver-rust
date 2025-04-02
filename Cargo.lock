@@ -64,6 +64,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuda"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "cuda-sys",
+]
+
+[[package]]
 name = "cuda-sys"
 version = "0.1.0"
 dependencies = [

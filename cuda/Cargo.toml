@@ -1,0 +1,11 @@
+[package]
+name = "cuda"
+version = "0.1.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+cuda-sys = { workspace = true }
+
+bitflags = { version = "2.9.0" }
