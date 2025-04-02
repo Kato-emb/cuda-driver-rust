@@ -38,13 +38,13 @@ pub unsafe fn get_luid(device: Device) -> CudaResult<([u8; 8], u32)> {
 
 pub unsafe fn get_name(device: Device) -> CudaResult<String> {
     let mut name_buf = [0i8; 256];
-    let size = name_buf.len() as i32;
-    unsafe { sys::cuDeviceGetName(name_buf.as_mut_ptr() as *mut i8, size, device.0) }
-        .to_result()?;
+    let len = name_buf.len() as i32;
+    unsafe { sys::cuDeviceGetName(name_buf.as_mut_ptr() as *mut i8, len, device.0) }.to_result()?;
 
     let name = unsafe { std::ffi::CStr::from_ptr(name_buf.as_ptr()) }
         .to_string_lossy()
         .into_owned();
+
     Ok(name)
 }
 
@@ -67,6 +67,29 @@ pub unsafe fn total_mem(device: Device) -> CudaResult<usize> {
 
 pub unsafe fn get_mem_pool() {}
 pub unsafe fn set_mem_pool() {}
+
+pub unsafe fn get_by_pci_bus_id(pci_bus_id: &str) -> CudaResult<Device> {
+    let mut device = 0;
+    let pci_bus_id = std::ffi::CString::new(pci_bus_id).unwrap_or_default();
+    unsafe { sys::cuDeviceGetByPCIBusId(&mut device, pci_bus_id.as_ptr()) }.to_result()?;
+
+    Ok(Device(device))
+}
+
+pub unsafe fn get_pci_bus_id(device: Device) -> CudaResult<String> {
+    let mut pci_bus_id_buf = [0i8; 256];
+    let len = pci_bus_id_buf.len() as i32;
+    unsafe { sys::cuDeviceGetPCIBusId(pci_bus_id_buf.as_mut_ptr(), len, device.0) }.to_result()?;
+
+    let pci_bus_id = unsafe { std::ffi::CStr::from_ptr(pci_bus_id_buf.as_ptr()) }
+        .to_string_lossy()
+        .into_owned();
+
+    Ok(pci_bus_id)
+}
+
+pub unsafe fn register_async_notification() {}
+pub unsafe fn unregister_async_notification() {}
 
 #[cfg(test)]
 mod tests {
@@ -142,6 +165,27 @@ mod tests {
         assert!(
             result.is_ok(),
             "CUDA device total memory retrieval failed: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_cuda_raw_device_get_pci_bus_id() {
+        unsafe { init(InitFlags::_ZERO) }.unwrap();
+
+        let device = unsafe { get_device(0).unwrap() };
+        let result = unsafe { get_pci_bus_id(device) };
+        assert!(
+            result.is_ok(),
+            "CUDA device PCI bus ID retrieval failed: {:?}",
+            result
+        );
+
+        let pci_bus_id = result.unwrap();
+        let result = unsafe { get_by_pci_bus_id(&pci_bus_id) };
+        assert!(
+            result.is_ok(),
+            "CUDA device retrieval by PCI bus ID failed: {:?}",
             result
         );
     }
