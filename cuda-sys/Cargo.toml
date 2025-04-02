@@ -1,0 +1,18 @@
+[package]
+name = "cuda-sys"
+version = "0.1.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+build = "build.rs"
+links = "cuda"
+
+[features]
+default = []
+
+ffi = ["bindgen"]
+
+[dependencies]
+
+[build-dependencies]
+bindgen = { version = "0.71.1", optional = true }

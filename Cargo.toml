@@ -1,0 +1,10 @@
+[workspace.package]
+edition = "2024"
+repository = "https://github.com/Kato-emb/cuda-driver-rust"
+authors = ["Ryohei Kato<r-kato@musen.co.jp>"]
+
+[workspace]
+resolver = "2"
+members = ["cuda-sys"]
+
+[workspace.dependencies]
