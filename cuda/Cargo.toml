@@ -9,3 +9,4 @@ authors.workspace = true
 cuda-sys = { workspace = true }
 
 bitflags = { version = "2.9.0" }
+uuid = { version = "1.16.0" }
