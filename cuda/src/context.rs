@@ -14,8 +14,8 @@ impl Ctx for Primary {
 }
 
 #[derive(Debug)]
-pub struct Local;
-impl Ctx for Local {
+pub struct Custom;
+impl Ctx for Custom {
     fn release(ctx: &CudaContext<Self>) -> CudaResult<()> {
         unsafe { destroy(ctx.inner) }
     }
@@ -37,7 +37,7 @@ impl<C: Ctx> Drop for CudaContext<C> {
 }
 
 pub type CudaPrimaryContext = CudaContext<Primary>;
-pub type CudaLocalContext = CudaContext<Local>;
+pub type CudaCustomContext = CudaContext<Custom>;
 
 impl CudaPrimaryContext {
     pub fn new(device: CudaDevice) -> CudaResult<Self> {
@@ -52,7 +52,7 @@ impl CudaPrimaryContext {
     }
 }
 
-impl CudaLocalContext {
+impl CudaCustomContext {
     pub fn new(device: CudaDevice, flags: ContextFlags) -> CudaResult<Self> {
         let inner = unsafe { create(flags, device.inner) }?;
         Ok(Self {
@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn test_cuda_context_create_local() {
         let device = CudaDevice::new(0).unwrap();
-        let result = CudaLocalContext::new(device, ContextFlags::SCHED_AUTO);
+        let result = CudaCustomContext::new(device, ContextFlags::SCHED_AUTO);
         assert!(result.is_ok(), "CUDA context creation failed: {:?}", result);
     }
 }
