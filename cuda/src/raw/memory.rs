@@ -7,7 +7,9 @@ use crate::{
 
 pub mod array;
 pub mod device;
+pub mod ordered;
 pub mod pinned;
+pub mod pool;
 pub mod unified;
 
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
