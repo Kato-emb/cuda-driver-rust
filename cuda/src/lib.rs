@@ -3,7 +3,6 @@ use error::CudaResult;
 pub mod context;
 pub mod device;
 pub mod error;
-pub mod memory;
 
 pub mod raw;
 
