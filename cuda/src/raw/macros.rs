@@ -16,6 +16,12 @@ macro_rules! wrap_sys_handle {
             }
         }
 
+        impl Default for $name {
+            fn default() -> Self {
+                Self(unsafe { std::mem::zeroed() })
+            }
+        }
+
         impl From<$name> for $sys_ty {
             fn from(handle: $name) -> Self {
                 handle.0
