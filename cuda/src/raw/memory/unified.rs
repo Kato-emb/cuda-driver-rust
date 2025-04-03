@@ -9,6 +9,7 @@ use crate::{
 use super::DevicePtr;
 
 wrap_sys_handle!(Location, sys::CUmemLocation);
+wrap_sys_handle!(AccessDesc, sys::CUmemAccessDesc);
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,13 +155,13 @@ pub unsafe fn pointer_get_attribute<T>(
 pub unsafe fn pointer_get_attributes() {}
 
 pub unsafe fn pointer_set_attribute<T>(
-    value: *const T,
+    value: &T,
     attribute: PointerAttribute,
     device_ptr: DevicePtr,
 ) -> CudaResult<()> {
     unsafe {
         sys::cuPointerSetAttribute(
-            value as *const std::ffi::c_void,
+            value as *const _ as *const std::ffi::c_void,
             attribute.into(),
             device_ptr.0,
         )
