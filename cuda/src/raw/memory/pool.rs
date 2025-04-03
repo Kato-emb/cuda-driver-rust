@@ -8,47 +8,12 @@ use crate::{
 };
 
 use super::{
-    DevicePtr,
-    unified::{AccessDesc, Location},
+    AccessDesc, AccessFlags, AllocationHandleType, DevicePtr, Location, ShareableHandleFlags,
 };
 
 wrap_sys_handle!(MemoryPool, sys::CUmemoryPool);
 wrap_sys_handle!(MemoryPoolProps, sys::CUmemPoolProps);
-wrap_sys_handle!(MemPoolExportData, sys::CUmemPoolPtrExportData);
-
-wrap_sys_enum!(
-    AllocationType,
-    sys::CUmemAllocationType,
-    {
-        Invalid = CU_MEM_ALLOCATION_TYPE_INVALID,
-        Pinned = CU_MEM_ALLOCATION_TYPE_PINNED,
-        Max = CU_MEM_ALLOCATION_TYPE_MAX,
-    }
-);
-
-wrap_sys_enum!(
-    AllocationHandleType,
-    sys::CUmemAllocationHandleType,
-    {
-        None = CU_MEM_HANDLE_TYPE_NONE,
-        Posix = CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR,
-        Win32 = CU_MEM_HANDLE_TYPE_WIN32,
-        Win32Kmt = CU_MEM_HANDLE_TYPE_WIN32_KMT,
-        Fabric = CU_MEM_HANDLE_TYPE_FABRIC,
-        Max = CU_MEM_HANDLE_TYPE_MAX,
-    }
-);
-
-wrap_sys_enum!(
-    AccessFlags,
-    sys::CUmemAccess_flags,
-    {
-        None = CU_MEM_ACCESS_FLAGS_PROT_NONE,
-        Read = CU_MEM_ACCESS_FLAGS_PROT_READ,
-        ReadWrite = CU_MEM_ACCESS_FLAGS_PROT_READWRITE,
-        Max = CU_MEM_ACCESS_FLAGS_PROT_MAX,
-    }
-);
+wrap_sys_handle!(MemoryPoolExportData, sys::CUmemPoolPtrExportData);
 
 wrap_sys_enum!(
     MemoryPoolAttribute,
@@ -64,13 +29,6 @@ wrap_sys_enum!(
         UsedMemHigh = CU_MEMPOOL_ATTR_USED_MEM_HIGH,
     }
 );
-
-bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct ShareableHandleFlags: u64 {
-        const _ZERO = 0;
-    }
-}
 
 pub unsafe fn create(props: &MemoryPoolProps) -> CudaResult<MemoryPool> {
     let mut pool = MaybeUninit::uninit();
@@ -131,16 +89,16 @@ pub unsafe fn set_attribute<T>(
     .to_result()
 }
 
-pub unsafe fn export_pointer(device_ptr: DevicePtr) -> CudaResult<MemPoolExportData> {
+pub unsafe fn export_pointer(device_ptr: DevicePtr) -> CudaResult<MemoryPoolExportData> {
     let mut export_data = MaybeUninit::uninit();
     unsafe { sys::cuMemPoolExportPointer(export_data.as_mut_ptr(), device_ptr.0) }.to_result()?;
 
-    Ok(MemPoolExportData(unsafe { export_data.assume_init() }))
+    Ok(MemoryPoolExportData(unsafe { export_data.assume_init() }))
 }
 
 pub unsafe fn import_pointer(
     pool: MemoryPool,
-    share_data: &MemPoolExportData,
+    share_data: &MemoryPoolExportData,
 ) -> CudaResult<DevicePtr> {
     let mut device_ptr = 0;
     unsafe {
@@ -200,7 +158,7 @@ pub unsafe fn trim_to(pool: MemoryPool, keep: usize) -> CudaResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raw::{context, device, init};
+    use crate::raw::{context, device, init, memory::AllocationType};
 
     #[test]
     fn test_cuda_raw_memory_pool() {
@@ -210,7 +168,7 @@ mod tests {
 
         let mut props = MemoryPoolProps(unsafe { std::mem::zeroed() });
         props.0.allocType = AllocationType::Pinned.into();
-        props.0.handleTypes = AllocationHandleType::Posix.into();
+        props.0.handleTypes = AllocationHandleType::PosixFD.into();
         props.0.location = sys::CUmemLocation {
             type_: sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
             id: device.0,

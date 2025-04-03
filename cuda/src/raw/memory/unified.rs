@@ -3,13 +3,10 @@ use cuda_sys::ffi as sys;
 use crate::{
     error::{CudaResult, ToResult},
     raw::stream::Stream,
-    wrap_sys_enum, wrap_sys_handle,
+    wrap_sys_enum,
 };
 
-use super::DevicePtr;
-
-wrap_sys_handle!(Location, sys::CUmemLocation);
-wrap_sys_handle!(AccessDesc, sys::CUmemAccessDesc);
+use super::{DevicePtr, Location};
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
