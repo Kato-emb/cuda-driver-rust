@@ -54,6 +54,7 @@ mod tests {
 
     #[test]
     fn test_cuda_device_count() {
+        crate::init();
         let result = CudaDevice::count();
         assert!(
             result.is_ok(),
@@ -64,6 +65,7 @@ mod tests {
 
     #[test]
     fn test_cuda_device_new() {
+        crate::init();
         let result = CudaDevice::new(0);
         assert!(result.is_ok(), "CUDA device creation failed: {:?}", result);
 

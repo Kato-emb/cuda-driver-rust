@@ -9,13 +9,17 @@ pub mod raw;
 pub static CUDA_INITIALIZED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
-fn initialized() {
+/// Initializes the CUDA driver API.
+pub fn init() {
     use crate::raw::init;
 
-    if unsafe { init::init(init::InitFlags::_ZERO) }.is_err() {
-        panic!("CUDA not initialized");
-    } else {
-        CUDA_INITIALIZED.store(true, std::sync::atomic::Ordering::SeqCst);
+    match unsafe { init::init(init::InitFlags::_ZERO) } {
+        Ok(_) => {
+            CUDA_INITIALIZED.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        Err(e) => {
+            panic!("CUDA could not initialized: {:?}", e);
+        }
     }
 }
 
@@ -23,7 +27,7 @@ fn initialized() {
 macro_rules! assert_initialized {
     () => {
         if !crate::CUDA_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst) {
-            $crate::initialized();
+            panic!("CUDA Driver has not been initialized. Call `cuda::init()` first.");
         }
     };
 }
@@ -40,6 +44,12 @@ pub fn check_api_version() -> CudaResult<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_cuda_initialization() {
+        init();
+        assert!(CUDA_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst));
+    }
 
     #[test]
     fn test_cuda_version() {
