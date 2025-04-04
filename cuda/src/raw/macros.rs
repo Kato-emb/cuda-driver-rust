@@ -3,7 +3,7 @@
 macro_rules! wrap_sys_handle {
     ($name:ident, $sys_ty:ty) => {
         #[repr(transparent)]
-        #[derive(Debug, Clone, Copy)]
+        #[derive(Clone, Copy)]
         pub struct $name(pub(crate) $sys_ty);
 
         impl $name {

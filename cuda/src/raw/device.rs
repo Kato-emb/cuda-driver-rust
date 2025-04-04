@@ -6,7 +6,20 @@ use crate::error::{CudaResult, ToResult};
 use crate::{wrap_sys_enum, wrap_sys_handle};
 
 wrap_sys_handle!(Device, sys::CUdevice);
+
+impl std::fmt::Debug for Device {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Device").field("handle", &self.0).finish()
+    }
+}
+
 wrap_sys_handle!(Uuid, sys::CUuuid);
+
+impl std::fmt::Debug for Uuid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Uuid").field("uuid", &self.0).finish()
+    }
+}
 
 wrap_sys_enum!(
     DeviceAttribute,
@@ -165,6 +178,9 @@ wrap_sys_enum!(
     }
 );
 
+/// Returns a handle to a compute device.
+/// ## Safety
+/// Befure calling this function, ensure that the CUDA driver API has been initialized using [crate::raw::init::init()].
 pub unsafe fn get_device(ordinal: i32) -> CudaResult<Device> {
     let mut device = 0;
     unsafe { sys::cuDeviceGet(&mut device, ordinal) }.to_result()?;
@@ -172,6 +188,7 @@ pub unsafe fn get_device(ordinal: i32) -> CudaResult<Device> {
     Ok(Device(device))
 }
 
+/// Returns information about the device.
 pub unsafe fn get_attribute(attr: DeviceAttribute, device: Device) -> CudaResult<i32> {
     let mut value = 0;
     unsafe { sys::cuDeviceGetAttribute(&mut value, attr.into(), device.0) }.to_result()?;

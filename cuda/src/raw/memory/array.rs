@@ -9,7 +9,23 @@ use crate::{
 };
 
 wrap_sys_handle!(Array, sys::CUarray);
+
+impl std::fmt::Debug for Array {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Array").field("handle", &self.0).finish()
+    }
+}
+
 wrap_sys_handle!(ArrayDescriptor, sys::CUDA_ARRAY_DESCRIPTOR);
+
+impl std::fmt::Debug for ArrayDescriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ArrayDescriptor")
+            .field("handle", &self.0)
+            .finish()
+    }
+}
+
 wrap_sys_handle!(Array3DDescriptor, sys::CUDA_ARRAY3D_DESCRIPTOR);
 wrap_sys_handle!(ArrayMemoryRequirements, sys::CUDA_ARRAY_MEMORY_REQUIREMENTS);
 wrap_sys_handle!(ArraySparseProperties, sys::CUDA_ARRAY_SPARSE_PROPERTIES);

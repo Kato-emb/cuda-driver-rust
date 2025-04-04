@@ -12,7 +12,17 @@ use super::device::Device;
 pub mod primary;
 
 wrap_sys_handle!(Context, sys::CUcontext);
+
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context").field("handle", &self.0).finish()
+    }
+}
+
 wrap_sys_handle!(GreenContext, sys::CUgreenCtx);
+
+wrap_sys_handle!(AffinityParam, sys::CUexecAffinityParam);
+wrap_sys_handle!(CreateParams, sys::CUctxCreateParams);
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,8 +66,40 @@ pub unsafe fn create(flags: ContextFlags, device: Device) -> CudaResult<Context>
     Ok(Context(unsafe { ctx.assume_init() }))
 }
 
-pub unsafe fn create_v3() {}
-pub unsafe fn create_v4() {}
+pub unsafe fn create_with_exec_affinity(
+    params: &[AffinityParam],
+    flags: ContextFlags,
+    device: Device,
+) -> CudaResult<Context> {
+    let mut ctx = MaybeUninit::uninit();
+    let num_params = params.len() as i32;
+
+    unsafe {
+        sys::cuCtxCreate_v3(
+            ctx.as_mut_ptr(),
+            params.as_ptr() as *mut sys::CUexecAffinityParam,
+            num_params,
+            flags.bits(),
+            device.0,
+        )
+    }
+    .to_result()?;
+
+    Ok(Context(unsafe { ctx.assume_init() }))
+}
+
+pub unsafe fn create_with_params(
+    params: CreateParams,
+    flags: ContextFlags,
+    device: Device,
+) -> CudaResult<Context> {
+    let mut ctx = MaybeUninit::uninit();
+    let mut params = params.0;
+    unsafe { sys::cuCtxCreate_v4(ctx.as_mut_ptr(), &mut params, flags.bits(), device.0) }
+        .to_result()?;
+
+    Ok(Context(unsafe { ctx.assume_init() }))
+}
 
 pub unsafe fn destroy(ctx: Context) -> CudaResult<()> {
     unsafe { sys::cuCtxDestroy_v2(ctx.0) }.to_result()

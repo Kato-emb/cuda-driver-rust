@@ -12,7 +12,24 @@ use super::{
 };
 
 wrap_sys_handle!(DeviceHandle, sys::CUmemGenericAllocationHandle);
+
+impl std::fmt::Debug for DeviceHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceHandle")
+            .field("handle", &self.0)
+            .finish()
+    }
+}
+
 wrap_sys_handle!(AllocationProp, sys::CUmemAllocationProp);
+
+impl std::fmt::Debug for AllocationProp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AllocationProp")
+            .field("handle", &self.0)
+            .finish()
+    }
+}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
