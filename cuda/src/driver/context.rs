@@ -1,55 +1,21 @@
-use crate::{
-    driver::{device::CudaDevice, event::CudaEvent},
-    error::CudaResult,
-    raw::context::*,
-};
+use std::ops::Deref;
 
-pub trait ContextOps: Sized {
-    fn release(ctx: &CudaContext<Self>) -> CudaResult<()>;
-}
+use crate::{driver::event::CudaEvent, error::CudaResult, raw::context::*};
+
+use super::device::CudaDevice;
 
 #[derive(Debug)]
-pub struct Primary;
-impl ContextOps for Primary {
-    fn release(ctx: &CudaContext<Self>) -> CudaResult<()> {
-        unsafe { primary::release(ctx.device.inner) }
-    }
+pub struct CudaContext {
+    pub(crate) inner: Context,
 }
 
-#[derive(Debug)]
-pub struct Custom;
-impl ContextOps for Custom {
-    fn release(ctx: &CudaContext<Self>) -> CudaResult<()> {
-        unsafe { destroy(ctx.inner) }
-    }
-}
-
-#[derive(Debug)]
-pub struct CudaContext<Ctx: ContextOps> {
-    inner: Context,
-    device: CudaDevice,
-    _marker: std::marker::PhantomData<Ctx>,
-}
-
-impl<Ctx: ContextOps> Drop for CudaContext<Ctx> {
-    fn drop(&mut self) {
-        if let Err(e) = Ctx::release(self) {
-            log::error!("Failed to release CUDA context: {:?}", e);
-        }
-    }
-}
-
-impl<Ctx: ContextOps> CudaContext<Ctx> {
+impl CudaContext {
     pub fn id(&self) -> CudaResult<u64> {
-        unsafe { get_id(self.inner) }
+        unsafe { get_id(Some(self.inner)) }
     }
 
     pub fn api_version(&self) -> CudaResult<u32> {
         unsafe { get_api_version(self.inner) }
-    }
-
-    pub fn device(&self) -> &CudaDevice {
-        &self.device
     }
 
     pub fn record_event(&self, event: &CudaEvent) -> CudaResult<()> {
@@ -59,26 +25,88 @@ impl<Ctx: ContextOps> CudaContext<Ctx> {
     pub fn wait_event(&self, event: &CudaEvent) -> CudaResult<()> {
         unsafe { wait_event(self.inner, event.inner) }
     }
+
+    pub fn set_current(&self) -> CudaResult<()> {
+        unsafe { set_current(self.inner) }
+    }
+
+    pub fn push_current(&self) -> CudaResult<()> {
+        unsafe { push_current(self.inner) }
+    }
 }
 
-pub type PrimaryContext = CudaContext<Primary>;
-pub type CustomContext = CudaContext<Custom>;
+#[derive(Debug)]
+pub struct CurrentContext;
 
-unsafe impl Send for CustomContext {}
-unsafe impl Sync for CustomContext {}
+impl CurrentContext {
+    pub fn context(&self) -> CudaResult<CudaContext> {
+        let ctx = unsafe { get_current() }?;
+        Ok(CudaContext { inner: ctx })
+    }
+
+    pub fn id(&self) -> CudaResult<u64> {
+        unsafe { get_id(None) }
+    }
+
+    pub fn flags(&self) -> CudaResult<ContextFlags> {
+        unsafe { get_flags() }
+    }
+
+    pub fn set_flags(&self, flags: ContextFlags) -> CudaResult<()> {
+        unsafe { set_flags(flags) }
+    }
+
+    pub fn cache_config(&self) -> CudaResult<CachePreference> {
+        unsafe { get_cache_config() }
+    }
+
+    pub fn set_cache_config(&self, config: CachePreference) -> CudaResult<()> {
+        unsafe { set_cache_config(config) }
+    }
+
+    pub fn device(&self) -> CudaResult<CudaDevice> {
+        let device = unsafe { get_device() }?;
+        Ok(CudaDevice { inner: device })
+    }
+
+    pub fn synchronize(&self) -> CudaResult<()> {
+        unsafe { synchronize() }
+    }
+}
+
+#[derive(Debug)]
+pub struct PrimaryContext {
+    ctx: CudaContext,
+    device: CudaDevice,
+}
+
+impl Drop for PrimaryContext {
+    fn drop(&mut self) {
+        if let Err(e) = unsafe { primary::release(self.device.inner) } {
+            log::error!("Failed to release CUDA context: {:?}", e);
+        }
+    }
+}
+
+impl Deref for PrimaryContext {
+    type Target = CudaContext;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ctx
+    }
+}
 
 impl PrimaryContext {
     pub fn new(device: CudaDevice) -> CudaResult<Self> {
         let ctx = unsafe { primary::retain(device.inner) }?;
         Ok(Self {
-            inner: ctx,
+            ctx: CudaContext { inner: ctx },
             device,
-            _marker: std::marker::PhantomData,
         })
     }
 
     pub fn bind_to_thread(&self) -> CudaResult<()> {
-        unsafe { set_current(self.inner) }
+        self.ctx.set_current()
     }
 
     pub fn state(&self) -> CudaResult<(ContextFlags, bool)> {
@@ -97,22 +125,25 @@ impl PrimaryContext {
     }
 }
 
-impl CustomContext {
-    pub fn new(device: CudaDevice, flags: ContextFlags) -> CudaResult<Self> {
-        let ctx = unsafe { create(flags, device.inner) }?;
-        Ok(Self {
-            inner: ctx,
-            device,
-            _marker: std::marker::PhantomData,
-        })
-    }
+pub struct OwnedContext {
+    ctx: CudaContext,
+}
 
-    pub fn push_to_thread(&self) -> CudaResult<()> {
-        unsafe { push_current(self.inner) }
+impl Drop for OwnedContext {
+    fn drop(&mut self) {
+        if let Err(e) = unsafe { destroy(self.ctx.inner) } {
+            log::error!("Failed to destroy CUDA context: {:?}", e);
+        }
     }
 }
 
-pub struct CurrentContext;
+impl Deref for OwnedContext {
+    type Target = CudaContext;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ctx
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -135,15 +166,15 @@ mod tests {
         ctx.bind_to_thread().unwrap();
     }
 
-    #[test]
-    fn test_cuda_driver_context_custom_new() {
-        crate::driver::init();
-        let device = CudaDevice::new(0).unwrap();
-        let result = CustomContext::new(device, ContextFlags::SCHED_AUTO);
-        assert!(
-            result.is_ok(),
-            "CUDA custom context creation failed: {:?}",
-            result
-        );
-    }
+    // #[test]
+    // fn test_cuda_driver_context_custom_new() {
+    //     crate::driver::init();
+    //     let device = CudaDevice::new(0).unwrap();
+    //     let result = CustomContext::new(device, ContextFlags::SCHED_AUTO);
+    //     assert!(
+    //         result.is_ok(),
+    //         "CUDA custom context creation failed: {:?}",
+    //         result
+    //     );
+    // }
 }
