@@ -10,10 +10,16 @@ use crate::{
 use super::{
     context::{Context, GreenContext},
     device::Device,
-    event::EventWaitFlags,
+    event::{Event, EventWaitFlags},
 };
 
 wrap_sys_handle!(Stream, sys::CUstream);
+
+impl std::fmt::Debug for Stream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Stream").field("handle", &self.0).finish()
+    }
+}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,10 +105,6 @@ pub unsafe fn synchronize(stream: Stream) -> CudaResult<()> {
     unsafe { sys::cuStreamSynchronize(stream.0) }.to_result()
 }
 
-pub unsafe fn wait_event(
-    stream: Stream,
-    event: sys::CUevent,
-    flags: EventWaitFlags,
-) -> CudaResult<()> {
-    unsafe { sys::cuStreamWaitEvent(stream.0, event, flags.bits()) }.to_result()
+pub unsafe fn wait_event(stream: Stream, event: Event, flags: EventWaitFlags) -> CudaResult<()> {
+    unsafe { sys::cuStreamWaitEvent(stream.0, event.0, flags.bits()) }.to_result()
 }

@@ -5,6 +5,7 @@ use crate::error::CudaResult;
 pub mod context;
 pub mod device;
 pub mod event;
+pub mod stream;
 
 pub static CUDA_INITIALIZED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
