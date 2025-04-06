@@ -174,6 +174,14 @@ pub unsafe fn set_cache_config(config: CachePreference) -> CudaResult<()> {
     unsafe { sys::cuCtxSetCacheConfig(config.into()) }.to_result()
 }
 
+/// Returns the device handle for the current context.
+pub unsafe fn get_device() -> CudaResult<Device> {
+    let mut device = MaybeUninit::uninit();
+    unsafe { sys::cuCtxGetDevice(device.as_mut_ptr()) }.to_result()?;
+
+    Ok(Device(unsafe { device.assume_init() }))
+}
+
 pub unsafe fn get_api_version(ctx: Context) -> CudaResult<u32> {
     let mut version = 0;
     unsafe { sys::cuCtxGetApiVersion(ctx.0, &mut version) }.to_result()?;
@@ -185,9 +193,18 @@ pub unsafe fn synchronize() -> CudaResult<()> {
     unsafe { sys::cuCtxSynchronize() }.to_result()
 }
 
-pub unsafe fn get_id(ctx: Context) -> CudaResult<u64> {
+/// Returns the unique Id associated with the context supplied.
+/// ## Returns
+/// * `ctxId` : If no context is supplied, the current context is used.
+pub unsafe fn get_id(ctx: Option<Context>) -> CudaResult<u64> {
     let mut id = 0;
-    unsafe { sys::cuCtxGetId(ctx.0, &mut id) }.to_result()?;
+    unsafe {
+        sys::cuCtxGetId(
+            ctx.map(|ctx| ctx.0).unwrap_or(std::ptr::null_mut()),
+            &mut id,
+        )
+    }
+    .to_result()?;
 
     Ok(id)
 }
