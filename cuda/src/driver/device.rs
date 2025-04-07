@@ -8,9 +8,9 @@ impl std::fmt::Debug for CudaDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CudaDevice")
             .field("handle", &self.inner.0)
-            .field("name", &self.name().unwrap_or_default())
-            .field("uuid", &self.uuid().unwrap_or_default())
-            .field("total_memory", &self.total_memory().unwrap_or_default())
+            .field("name", &self.name().ok())
+            .field("uuid", &self.uuid().ok())
+            .field("total_memory", &self.total_memory().ok())
             .finish()
     }
 }
