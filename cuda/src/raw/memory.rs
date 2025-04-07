@@ -14,6 +14,13 @@ pub mod unified;
 pub mod vmm;
 
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
+
+impl std::fmt::Debug for DevicePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DevicePtr").field("ptr", &self.0).finish()
+    }
+}
+
 wrap_sys_handle!(Location, sys::CUmemLocation);
 wrap_sys_handle!(AccessDesc, sys::CUmemAccessDesc);
 
