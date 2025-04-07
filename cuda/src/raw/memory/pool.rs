@@ -86,12 +86,30 @@ pub unsafe fn set_attribute<T>(
     .to_result()
 }
 
-pub unsafe fn export_to_shareable_handle<T>(
+pub unsafe fn trim_to(pool: MemoryPool, keep: usize) -> CudaResult<()> {
+    unsafe { sys::cuMemPoolTrimTo(pool.0, keep) }.to_result()
+}
+
+pub trait ShareableHandle {
+    fn as_ptr(&self) -> *mut std::ffi::c_void;
+}
+
+#[cfg(target_os = "linux")]
+impl<T> ShareableHandle for T
+where
+    T: std::os::fd::AsRawFd,
+{
+    fn as_ptr(&self) -> *mut std::ffi::c_void {
+        self.as_raw_fd() as *mut std::ffi::c_void
+    }
+}
+
+pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(
     pool: MemoryPool,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
-) -> CudaResult<T> {
-    let mut handle = MaybeUninit::<T>::uninit();
+) -> CudaResult<Handle> {
+    let mut handle = MaybeUninit::<Handle>::uninit();
     unsafe {
         sys::cuMemPoolExportToShareableHandle(
             handle.as_mut_ptr() as *mut std::ffi::c_void,
@@ -105,8 +123,8 @@ pub unsafe fn export_to_shareable_handle<T>(
     Ok(unsafe { handle.assume_init() })
 }
 
-pub unsafe fn import_from_shareable_handle<T>(
-    handle: &T,
+pub unsafe fn import_from_shareable_handle<Handle: ShareableHandle>(
+    handle: &Handle,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
 ) -> CudaResult<MemoryPool> {
@@ -114,7 +132,7 @@ pub unsafe fn import_from_shareable_handle<T>(
     unsafe {
         sys::cuMemPoolImportFromShareableHandle(
             pool.as_mut_ptr(),
-            handle as *const _ as *mut std::ffi::c_void,
+            handle.as_ptr(),
             handle_type.into(),
             flags.bits(),
         )
@@ -122,10 +140,6 @@ pub unsafe fn import_from_shareable_handle<T>(
     .to_result()?;
 
     Ok(MemoryPool(unsafe { pool.assume_init() }))
-}
-
-pub unsafe fn trim_to(pool: MemoryPool, keep: usize) -> CudaResult<()> {
-    unsafe { sys::cuMemPoolTrimTo(pool.0, keep) }.to_result()
 }
 
 #[cfg(test)]
