@@ -7,13 +7,10 @@ use crate::{
     wrap_sys_enum, wrap_sys_handle,
 };
 
-use super::{
-    AccessDesc, AccessFlags, AllocationHandleType, DevicePtr, Location, ShareableHandleFlags,
-};
+use super::{AccessDesc, AccessFlags, AllocationHandleType, Location, ShareableHandleFlags};
 
 wrap_sys_handle!(MemoryPool, sys::CUmemoryPool);
 wrap_sys_handle!(MemoryPoolProps, sys::CUmemPoolProps);
-wrap_sys_handle!(MemoryPoolExportData, sys::CUmemPoolPtrExportData);
 
 wrap_sys_enum!(
     MemoryPoolAttribute,
@@ -87,30 +84,6 @@ pub unsafe fn set_attribute<T>(
         )
     }
     .to_result()
-}
-
-pub unsafe fn export_pointer(device_ptr: DevicePtr) -> CudaResult<MemoryPoolExportData> {
-    let mut export_data = MaybeUninit::uninit();
-    unsafe { sys::cuMemPoolExportPointer(export_data.as_mut_ptr(), device_ptr.0) }.to_result()?;
-
-    Ok(MemoryPoolExportData(unsafe { export_data.assume_init() }))
-}
-
-pub unsafe fn import_pointer(
-    pool: MemoryPool,
-    share_data: &MemoryPoolExportData,
-) -> CudaResult<DevicePtr> {
-    let mut device_ptr = 0;
-    unsafe {
-        sys::cuMemPoolImportPointer(
-            &mut device_ptr,
-            pool.0,
-            &share_data.0 as *const _ as *mut sys::CUmemPoolPtrExportData,
-        )
-    }
-    .to_result()?;
-
-    Ok(DevicePtr(device_ptr))
 }
 
 pub unsafe fn export_to_shareable_handle<T>(
