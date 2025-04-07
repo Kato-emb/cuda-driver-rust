@@ -68,12 +68,12 @@ pub mod current {
 }
 
 #[derive(Debug)]
-pub struct PrimaryContext {
+pub struct CudaPrimaryContext {
     ctx: CudaContext,
     device: CudaDevice,
 }
 
-impl Deref for PrimaryContext {
+impl Deref for CudaPrimaryContext {
     type Target = CudaContext;
 
     fn deref(&self) -> &Self::Target {
@@ -81,7 +81,7 @@ impl Deref for PrimaryContext {
     }
 }
 
-impl Drop for PrimaryContext {
+impl Drop for CudaPrimaryContext {
     fn drop(&mut self) {
         if let Err(e) = unsafe { primary::release(self.device.inner) } {
             log::error!("Failed to release CUDA context: {:?}", e);
@@ -89,7 +89,7 @@ impl Drop for PrimaryContext {
     }
 }
 
-impl PrimaryContext {
+impl CudaPrimaryContext {
     pub fn new(device: CudaDevice) -> CudaResult<Self> {
         let inner = unsafe { primary::retain(device.inner) }?;
         Ok(Self {
@@ -118,11 +118,11 @@ impl PrimaryContext {
     }
 }
 
-pub struct OwnedContext {
+pub struct CudaOwnedContext {
     ctx: CudaContext,
 }
 
-impl Deref for OwnedContext {
+impl Deref for CudaOwnedContext {
     type Target = CudaContext;
 
     fn deref(&self) -> &Self::Target {
@@ -130,7 +130,7 @@ impl Deref for OwnedContext {
     }
 }
 
-impl Drop for OwnedContext {
+impl Drop for CudaOwnedContext {
     fn drop(&mut self) {
         if let Err(e) = unsafe { destroy(self.ctx.inner) } {
             log::error!("Failed to destroy CUDA context: {:?}", e);
@@ -146,7 +146,7 @@ mod tests {
     fn test_cuda_driver_context_primary_new() {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
-        let result = PrimaryContext::new(device);
+        let result = CudaPrimaryContext::new(device);
 
         assert!(
             result.is_ok(),

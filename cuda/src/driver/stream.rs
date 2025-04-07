@@ -73,7 +73,7 @@ impl CudaStream {
 
 #[cfg(test)]
 mod tests {
-    use crate::driver::context::PrimaryContext;
+    use crate::driver::context::CudaPrimaryContext;
 
     use super::*;
 
@@ -81,7 +81,7 @@ mod tests {
     fn test_cuda_driver_stream_create() {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
-        let context = PrimaryContext::new(device).unwrap();
+        let context = CudaPrimaryContext::new(device).unwrap();
         context.set_current().unwrap();
 
         let stream = CudaStream::new(StreamFlags::DEFAULT);
