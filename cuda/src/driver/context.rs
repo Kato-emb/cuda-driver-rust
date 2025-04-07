@@ -25,52 +25,45 @@ impl CudaContext {
     pub fn wait_event(&self, event: &CudaEvent) -> CudaResult<()> {
         unsafe { wait_event(self.inner, event.inner) }
     }
-
-    pub fn set_current(&self) -> CudaResult<()> {
-        unsafe { set_current(self.inner) }
-    }
-
-    pub fn push_current(&self) -> CudaResult<()> {
-        unsafe { push_current(self.inner) }
-    }
 }
 
-#[derive(Debug)]
-pub struct CurrentContext;
+pub mod current {
+    use crate::{driver::device::CudaDevice, error::CudaResult, raw::context};
 
-impl CurrentContext {
-    pub fn context(&self) -> CudaResult<CudaContext> {
-        let ctx = unsafe { get_current() }?;
-        Ok(CudaContext { inner: ctx })
+    use super::CudaContext;
+
+    pub fn context() -> CudaResult<CudaContext> {
+        let inner = unsafe { context::get_current() }?;
+        Ok(CudaContext { inner })
     }
 
-    pub fn id(&self) -> CudaResult<u64> {
-        unsafe { get_id(None) }
+    pub fn id() -> CudaResult<u64> {
+        unsafe { context::get_id(None) }
     }
 
-    pub fn flags(&self) -> CudaResult<ContextFlags> {
-        unsafe { get_flags() }
+    pub fn flags() -> CudaResult<context::ContextFlags> {
+        unsafe { context::get_flags() }
     }
 
-    pub fn set_flags(&self, flags: ContextFlags) -> CudaResult<()> {
-        unsafe { set_flags(flags) }
+    pub fn set_flags(flags: context::ContextFlags) -> CudaResult<()> {
+        unsafe { context::set_flags(flags) }
     }
 
-    pub fn cache_config(&self) -> CudaResult<CachePreference> {
-        unsafe { get_cache_config() }
+    pub fn cache_config() -> CudaResult<context::CachePreference> {
+        unsafe { context::get_cache_config() }
     }
 
-    pub fn set_cache_config(&self, config: CachePreference) -> CudaResult<()> {
-        unsafe { set_cache_config(config) }
+    pub fn set_cache_config(config: context::CachePreference) -> CudaResult<()> {
+        unsafe { context::set_cache_config(config) }
     }
 
-    pub fn device(&self) -> CudaResult<CudaDevice> {
-        let device = unsafe { get_device() }?;
+    pub fn device() -> CudaResult<CudaDevice> {
+        let device = unsafe { context::get_device() }?;
         Ok(CudaDevice { inner: device })
     }
 
-    pub fn synchronize(&self) -> CudaResult<()> {
-        unsafe { synchronize() }
+    pub fn synchronize() -> CudaResult<()> {
+        unsafe { context::synchronize() }
     }
 }
 
@@ -78,14 +71,6 @@ impl CurrentContext {
 pub struct PrimaryContext {
     ctx: CudaContext,
     device: CudaDevice,
-}
-
-impl Drop for PrimaryContext {
-    fn drop(&mut self) {
-        if let Err(e) = unsafe { primary::release(self.device.inner) } {
-            log::error!("Failed to release CUDA context: {:?}", e);
-        }
-    }
 }
 
 impl Deref for PrimaryContext {
@@ -96,17 +81,25 @@ impl Deref for PrimaryContext {
     }
 }
 
+impl Drop for PrimaryContext {
+    fn drop(&mut self) {
+        if let Err(e) = unsafe { primary::release(self.device.inner) } {
+            log::error!("Failed to release CUDA context: {:?}", e);
+        }
+    }
+}
+
 impl PrimaryContext {
     pub fn new(device: CudaDevice) -> CudaResult<Self> {
-        let ctx = unsafe { primary::retain(device.inner) }?;
+        let inner = unsafe { primary::retain(device.inner) }?;
         Ok(Self {
-            ctx: CudaContext { inner: ctx },
+            ctx: CudaContext { inner },
             device,
         })
     }
 
-    pub fn bind_to_thread(&self) -> CudaResult<()> {
-        self.ctx.set_current()
+    pub fn set_current(&self) -> CudaResult<()> {
+        unsafe { set_current(self.ctx.inner) }
     }
 
     pub fn state(&self) -> CudaResult<(ContextFlags, bool)> {
@@ -129,19 +122,19 @@ pub struct OwnedContext {
     ctx: CudaContext,
 }
 
-impl Drop for OwnedContext {
-    fn drop(&mut self) {
-        if let Err(e) = unsafe { destroy(self.ctx.inner) } {
-            log::error!("Failed to destroy CUDA context: {:?}", e);
-        }
-    }
-}
-
 impl Deref for OwnedContext {
     type Target = CudaContext;
 
     fn deref(&self) -> &Self::Target {
         &self.ctx
+    }
+}
+
+impl Drop for OwnedContext {
+    fn drop(&mut self) {
+        if let Err(e) = unsafe { destroy(self.ctx.inner) } {
+            log::error!("Failed to destroy CUDA context: {:?}", e);
+        }
     }
 }
 
@@ -154,6 +147,7 @@ mod tests {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
         let result = PrimaryContext::new(device);
+
         assert!(
             result.is_ok(),
             "CUDA primary context creation failed: {:?}",
@@ -163,7 +157,8 @@ mod tests {
         let ctx = result.unwrap();
         assert!(ctx.state().is_ok_and(|(_flags, active)| active));
 
-        ctx.bind_to_thread().unwrap();
+        ctx.set_current().unwrap();
+        println!("Current context set to device: {:?}", current::context());
     }
 
     // #[test]
