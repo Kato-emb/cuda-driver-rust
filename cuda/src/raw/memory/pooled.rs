@@ -19,7 +19,11 @@ impl DeviceAccessible for PooledDevicePtr {
     }
 }
 
-impl DeviceManaged for PooledDevicePtr {}
+impl DeviceManaged for PooledDevicePtr {
+    fn null() -> Self {
+        PooledDevicePtr(0)
+    }
+}
 
 wrap_sys_handle!(PooledPtrExportData, sys::CUmemPoolPtrExportData);
 

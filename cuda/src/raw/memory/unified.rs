@@ -17,7 +17,11 @@ impl DeviceAccessible for UnifiedDevicePtr {
     }
 }
 
-impl DeviceManaged for UnifiedDevicePtr {}
+impl DeviceManaged for UnifiedDevicePtr {
+    fn null() -> Self {
+        UnifiedDevicePtr(0)
+    }
+}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
