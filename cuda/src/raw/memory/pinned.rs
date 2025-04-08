@@ -5,9 +5,17 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::DeviceAccessible;
+use super::{DeviceAccessible, HostAccessible};
 
 wrap_sys_handle!(PinnedHostPtr, *mut std::ffi::c_void);
+
+impl HostAccessible for PinnedHostPtr {
+    #[inline(always)]
+    fn as_host_ptr(&self) -> *mut std::ffi::c_void {
+        self.0
+    }
+}
+
 wrap_sys_handle!(PinnedDevicePtr, sys::CUdeviceptr);
 
 impl DeviceAccessible for PinnedDevicePtr {

@@ -17,6 +17,10 @@ pub trait DeviceAccessible {
     fn as_device_ptr(&self) -> sys::CUdeviceptr;
 }
 
+pub trait HostAccessible {
+    fn as_host_ptr(&self) -> *mut std::ffi::c_void;
+}
+
 /// A trait for device pointers that are managed by CUDA.
 ///
 /// Deallocated by CUDA, call [free()] or [free_async()] to deallocate.
@@ -187,8 +191,140 @@ where
         .to_result()
 }
 
+pub unsafe fn copy_dtod<Dst, Src>(dst: Dst, src: Src, byte_count: usize) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+    Src: DeviceAccessible,
+{
+    unsafe { sys::cuMemcpyDtoD_v2(dst.as_device_ptr(), src.as_device_ptr(), byte_count) }
+        .to_result()
+}
+
+pub unsafe fn copy_dtod_async<Dst, Src>(
+    dst: Dst,
+    src: Src,
+    bytesize: usize,
+    stream: Stream,
+) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+    Src: DeviceAccessible,
+{
+    unsafe {
+        sys::cuMemcpyDtoDAsync_v2(dst.as_device_ptr(), src.as_device_ptr(), bytesize, stream.0)
+    }
+    .to_result()
+}
+
+pub unsafe fn copy_dtoh<Dst, Src>(dst: Dst, src: Src, byte_count: usize) -> CudaResult<()>
+where
+    Dst: HostAccessible,
+    Src: DeviceAccessible,
+{
+    unsafe { sys::cuMemcpyDtoH_v2(dst.as_host_ptr(), src.as_device_ptr(), byte_count) }.to_result()
+}
+
+pub unsafe fn copy_dtoh_async<Dst, Src>(
+    dst: Dst,
+    src: Src,
+    bytesize: usize,
+    stream: Stream,
+) -> CudaResult<()>
+where
+    Dst: HostAccessible,
+    Src: DeviceAccessible,
+{
+    unsafe { sys::cuMemcpyDtoHAsync_v2(dst.as_host_ptr(), src.as_device_ptr(), bytesize, stream.0) }
+        .to_result()
+}
+
+pub unsafe fn copy_htod<Dst, Src>(dst: Dst, src: Src, byte_count: usize) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+    Src: HostAccessible,
+{
+    unsafe { sys::cuMemcpyHtoD_v2(dst.as_device_ptr(), src.as_host_ptr(), byte_count) }.to_result()
+}
+
+pub unsafe fn copy_htod_async<Dst, Src>(
+    dst: Dst,
+    src: Src,
+    bytesize: usize,
+    stream: Stream,
+) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+    Src: HostAccessible,
+{
+    unsafe { sys::cuMemcpyHtoDAsync_v2(dst.as_device_ptr(), src.as_host_ptr(), bytesize, stream.0) }
+        .to_result()
+}
+
+pub unsafe fn set_d8<Dst>(ptr: Dst, value: u8, num_elements: usize) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+{
+    unsafe { sys::cuMemsetD8_v2(ptr.as_device_ptr(), value, num_elements) }.to_result()
+}
+
+pub unsafe fn set_d8_async<Dst>(
+    ptr: Dst,
+    value: u8,
+    num_elements: usize,
+    stream: Stream,
+) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+{
+    unsafe { sys::cuMemsetD8Async(ptr.as_device_ptr(), value, num_elements, stream.0) }.to_result()
+}
+
+pub unsafe fn set_d16<Dst>(ptr: Dst, value: u16, num_elements: usize) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+{
+    debug_assert!(ptr.as_device_ptr() % 2 == 0);
+    unsafe { sys::cuMemsetD16_v2(ptr.as_device_ptr(), value, num_elements) }.to_result()
+}
+
+pub unsafe fn set_d16_async<Dst>(
+    ptr: Dst,
+    value: u16,
+    num_elements: usize,
+    stream: Stream,
+) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+{
+    debug_assert!(ptr.as_device_ptr() % 2 == 0);
+    unsafe { sys::cuMemsetD16Async(ptr.as_device_ptr(), value, num_elements, stream.0) }.to_result()
+}
+
+pub unsafe fn set_d32<Dst>(ptr: Dst, value: u32, num_elements: usize) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+{
+    debug_assert!(ptr.as_device_ptr() % 4 == 0);
+    unsafe { sys::cuMemsetD32_v2(ptr.as_device_ptr(), value, num_elements) }.to_result()
+}
+
+pub unsafe fn set_d32_async<Dst>(
+    ptr: Dst,
+    value: u32,
+    num_elements: usize,
+    stream: Stream,
+) -> CudaResult<()>
+where
+    Dst: DeviceAccessible,
+{
+    debug_assert!(ptr.as_device_ptr() % 4 == 0);
+    unsafe { sys::cuMemsetD32Async(ptr.as_device_ptr(), value, num_elements, stream.0) }.to_result()
+}
+
 #[cfg(test)]
 mod tests {
+    use std::{u8, u16};
+
     use super::*;
     use crate::raw::*;
 
@@ -202,6 +338,16 @@ mod tests {
         let bytesize = 1024;
 
         let ptr = unsafe { malloc_async(bytesize, stream) }.unwrap();
+        assert!(ptr.as_device_ptr() != 0);
+
+        let (base, size) = unsafe { get_address_range(ptr) }.unwrap();
+        assert!(base.is_some());
+        assert!(size.is_some());
+
+        unsafe { set_d8_async(ptr, u8::MAX, 1024, stream) }.unwrap();
+        unsafe { set_d16_async(ptr, u16::MAX, 512, stream) }.unwrap();
+        unsafe { set_d32_async(ptr, u32::MAX, 256, stream) }.unwrap();
+
         unsafe { free_async(ptr, stream) }.unwrap();
     }
 }
