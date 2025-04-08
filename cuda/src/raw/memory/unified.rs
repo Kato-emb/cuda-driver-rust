@@ -3,10 +3,21 @@ use cuda_sys::ffi as sys;
 use crate::{
     error::{CudaResult, ToResult},
     raw::stream::Stream,
-    wrap_sys_enum,
+    wrap_sys_enum, wrap_sys_handle,
 };
 
-use super::{DevicePtr, Location};
+use super::{DeviceAccessible, DeviceManaged, Location};
+
+wrap_sys_handle!(UnifiedDevicePtr, sys::CUdeviceptr);
+
+impl DeviceAccessible for UnifiedDevicePtr {
+    #[inline(always)]
+    fn as_device_ptr(&self) -> sys::CUdeviceptr {
+        self.0
+    }
+}
+
+impl DeviceManaged for UnifiedDevicePtr {}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,15 +91,18 @@ wrap_sys_enum!(
     }
 );
 
-pub unsafe fn malloc_unified(bytesize: usize, flags: MemoryAttachFlags) -> CudaResult<DevicePtr> {
+pub unsafe fn malloc_unified(
+    bytesize: usize,
+    flags: MemoryAttachFlags,
+) -> CudaResult<UnifiedDevicePtr> {
     let mut ptr = 0;
     unsafe { sys::cuMemAllocManaged(&mut ptr, bytesize, flags.bits()) }.to_result()?;
 
-    Ok(DevicePtr(ptr))
+    Ok(UnifiedDevicePtr(ptr))
 }
 
 pub unsafe fn advise(
-    device_ptr: DevicePtr,
+    device_ptr: UnifiedDevicePtr,
     count: usize,
     advice: Advice,
     location: Location,
@@ -97,7 +111,7 @@ pub unsafe fn advise(
 }
 
 pub unsafe fn prefetch_async(
-    device_ptr: DevicePtr,
+    device_ptr: UnifiedDevicePtr,
     count: usize,
     location: Location,
     stream: Stream,
@@ -109,7 +123,7 @@ pub unsafe fn prefetch_async(
 
 pub unsafe fn range_get_attribute<T: Sized>(
     attribute: RangeAttribute,
-    device_ptr: DevicePtr,
+    device_ptr: UnifiedDevicePtr,
     count: usize,
 ) -> CudaResult<T> {
     let mut data = std::mem::MaybeUninit::<T>::uninit();
@@ -133,7 +147,7 @@ pub unsafe fn range_get_attributes() {}
 
 pub unsafe fn pointer_get_attribute<T>(
     attribute: PointerAttribute,
-    device_ptr: DevicePtr,
+    device_ptr: UnifiedDevicePtr,
 ) -> CudaResult<T> {
     let mut data = std::mem::MaybeUninit::<T>::uninit();
 
@@ -154,7 +168,7 @@ pub unsafe fn pointer_get_attributes() {}
 pub unsafe fn pointer_set_attribute<T>(
     value: &T,
     attribute: PointerAttribute,
-    device_ptr: DevicePtr,
+    device_ptr: UnifiedDevicePtr,
 ) -> CudaResult<()> {
     unsafe {
         sys::cuPointerSetAttribute(

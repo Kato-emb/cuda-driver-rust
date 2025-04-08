@@ -7,7 +7,9 @@ use crate::{
     wrap_sys_enum, wrap_sys_handle,
 };
 
-use super::{AccessDesc, AccessFlags, AllocationHandleType, Location, ShareableHandleFlags};
+use super::memory::{
+    AccessDesc, AccessFlags, AllocationHandleType, Location, ShareableHandleFlags,
+};
 
 wrap_sys_handle!(MemoryPool, sys::CUmemoryPool);
 wrap_sys_handle!(MemoryPoolProps, sys::CUmemPoolProps);

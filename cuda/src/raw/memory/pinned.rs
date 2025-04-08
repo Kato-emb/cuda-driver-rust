@@ -5,9 +5,17 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::DevicePtr;
+use super::DeviceAccessible;
 
-wrap_sys_handle!(PinnedPtr, *mut std::ffi::c_void);
+wrap_sys_handle!(PinnedHostPtr, *mut std::ffi::c_void);
+wrap_sys_handle!(PinnedDevicePtr, sys::CUdeviceptr);
+
+impl DeviceAccessible for PinnedDevicePtr {
+    #[inline(always)]
+    fn as_device_ptr(&self) -> sys::CUdeviceptr {
+        self.0
+    }
+}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,39 +42,39 @@ bitflags::bitflags! {
     }
 }
 
-pub unsafe fn malloc_pinned(bytesize: usize) -> CudaResult<PinnedPtr> {
+pub unsafe fn malloc_pinned(bytesize: usize) -> CudaResult<PinnedHostPtr> {
     let mut ptr = std::ptr::null_mut();
     unsafe { sys::cuMemAllocHost_v2(&mut ptr, bytesize) }.to_result()?;
 
-    Ok(PinnedPtr(ptr))
+    Ok(PinnedHostPtr(ptr))
 }
 
 pub unsafe fn malloc_pinned_with_flags(
     bytesize: usize,
     flags: PinnedFlags,
-) -> CudaResult<PinnedPtr> {
+) -> CudaResult<PinnedHostPtr> {
     let mut ptr = std::ptr::null_mut();
     unsafe { sys::cuMemHostAlloc(&mut ptr, bytesize, flags.bits()) }.to_result()?;
 
-    Ok(PinnedPtr(ptr))
+    Ok(PinnedHostPtr(ptr))
 }
 
-pub unsafe fn free_pinned(ptr: PinnedPtr) -> CudaResult<()> {
+pub unsafe fn free_pinned(ptr: PinnedHostPtr) -> CudaResult<()> {
     unsafe { sys::cuMemFreeHost(ptr.0) }.to_result()
 }
 
 pub unsafe fn get_device_pointer(
-    host_ptr: PinnedPtr,
+    host_ptr: PinnedHostPtr,
     flags: DevicePointerFlags,
-) -> CudaResult<DevicePtr> {
+) -> CudaResult<PinnedDevicePtr> {
     let mut device_ptr = 0;
     unsafe { sys::cuMemHostGetDevicePointer_v2(&mut device_ptr, host_ptr.0, flags.bits()) }
         .to_result()?;
 
-    Ok(DevicePtr(device_ptr))
+    Ok(PinnedDevicePtr(device_ptr))
 }
 
-pub unsafe fn get_flags(host_ptr: PinnedPtr) -> CudaResult<PinnedFlags> {
+pub unsafe fn get_flags(host_ptr: PinnedHostPtr) -> CudaResult<PinnedFlags> {
     let mut flags = 0;
     unsafe { sys::cuMemHostGetFlags(&mut flags, host_ptr.0) }.to_result()?;
 
@@ -74,13 +82,13 @@ pub unsafe fn get_flags(host_ptr: PinnedPtr) -> CudaResult<PinnedFlags> {
 }
 
 pub unsafe fn register(
-    host_ptr: PinnedPtr,
+    host_ptr: PinnedHostPtr,
     bytesize: usize,
     flags: HostRegisterFlags,
 ) -> CudaResult<()> {
     unsafe { sys::cuMemHostRegister_v2(host_ptr.0, bytesize, flags.bits()) }.to_result()
 }
 
-pub unsafe fn unregister(host_ptr: PinnedPtr) -> CudaResult<()> {
+pub unsafe fn unregister(host_ptr: PinnedHostPtr) -> CudaResult<()> {
     unsafe { sys::cuMemHostUnregister(host_ptr.0) }.to_result()
 }
