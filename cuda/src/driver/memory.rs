@@ -8,6 +8,7 @@ use super::stream::CudaStream;
 // pub mod ordered;
 // pub mod pool;
 pub mod pinned;
+pub mod unified;
 
 pub unsafe trait DeviceRepr: Copy + 'static {}
 unsafe impl DeviceRepr for bool {}
