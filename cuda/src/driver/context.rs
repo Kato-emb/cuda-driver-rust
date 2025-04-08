@@ -28,9 +28,8 @@ impl CudaContext {
 }
 
 pub mod current {
-    use crate::{driver::device::CudaDevice, error::CudaResult, raw::context};
-
-    use super::CudaContext;
+    use super::*;
+    use crate::raw::context;
 
     pub fn context() -> CudaResult<CudaContext> {
         let inner = unsafe { context::get_current() }?;
