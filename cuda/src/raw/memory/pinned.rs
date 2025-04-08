@@ -5,14 +5,28 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::{DeviceAccessible, HostAccessible};
+use super::{DeviceAccessible, HostAccessible, HostManaged};
 
 wrap_sys_handle!(PinnedHostPtr, *mut std::ffi::c_void);
+
+impl std::fmt::Debug for PinnedHostPtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PinnedHostPtr")
+            .field("ptr", &self.0)
+            .finish()
+    }
+}
 
 impl HostAccessible for PinnedHostPtr {
     #[inline(always)]
     fn as_host_ptr(&self) -> *mut std::ffi::c_void {
         self.0
+    }
+}
+
+impl HostManaged for PinnedHostPtr {
+    fn null() -> Self {
+        PinnedHostPtr(std::ptr::null_mut())
     }
 }
 
@@ -67,12 +81,15 @@ pub unsafe fn malloc_pinned_with_flags(
     Ok(PinnedHostPtr(ptr))
 }
 
-pub unsafe fn free_pinned(ptr: PinnedHostPtr) -> CudaResult<()> {
-    unsafe { sys::cuMemFreeHost(ptr.0) }.to_result()
+pub unsafe fn free_pinned<P>(ptr: &mut P) -> CudaResult<()>
+where
+    P: HostManaged,
+{
+    unsafe { sys::cuMemFreeHost(ptr.as_host_ptr()) }.to_result()
 }
 
 pub unsafe fn get_device_pointer(
-    host_ptr: PinnedHostPtr,
+    host_ptr: &PinnedHostPtr,
     flags: DevicePointerFlags,
 ) -> CudaResult<PinnedDevicePtr> {
     let mut device_ptr = 0;
@@ -82,7 +99,7 @@ pub unsafe fn get_device_pointer(
     Ok(PinnedDevicePtr(device_ptr))
 }
 
-pub unsafe fn get_flags(host_ptr: PinnedHostPtr) -> CudaResult<PinnedFlags> {
+pub unsafe fn get_flags(host_ptr: &PinnedHostPtr) -> CudaResult<PinnedFlags> {
     let mut flags = 0;
     unsafe { sys::cuMemHostGetFlags(&mut flags, host_ptr.0) }.to_result()?;
 
@@ -90,13 +107,13 @@ pub unsafe fn get_flags(host_ptr: PinnedHostPtr) -> CudaResult<PinnedFlags> {
 }
 
 pub unsafe fn register(
-    host_ptr: PinnedHostPtr,
+    host_ptr: &PinnedHostPtr,
     bytesize: usize,
     flags: HostRegisterFlags,
 ) -> CudaResult<()> {
     unsafe { sys::cuMemHostRegister_v2(host_ptr.0, bytesize, flags.bits()) }.to_result()
 }
 
-pub unsafe fn unregister(host_ptr: PinnedHostPtr) -> CudaResult<()> {
+pub unsafe fn unregister(host_ptr: &PinnedHostPtr) -> CudaResult<()> {
     unsafe { sys::cuMemHostUnregister(host_ptr.0) }.to_result()
 }

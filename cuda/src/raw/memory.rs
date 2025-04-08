@@ -28,6 +28,10 @@ pub trait DeviceManaged: DeviceAccessible {
     fn null() -> Self;
 }
 
+pub trait HostManaged: HostAccessible {
+    fn null() -> Self;
+}
+
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
 
 impl DeviceAccessible for DevicePtr {
