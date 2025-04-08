@@ -190,15 +190,22 @@ where
 pub unsafe fn copy_async<Dst, Src>(
     dst: &mut Dst,
     src: &Src,
-    bytesize: usize,
+    byte_count: usize,
     stream: &Stream,
 ) -> CudaResult<()>
 where
     Dst: DeviceAccessible,
     Src: DeviceAccessible,
 {
-    unsafe { sys::cuMemcpyAsync(dst.as_device_ptr(), src.as_device_ptr(), bytesize, stream.0) }
-        .to_result()
+    unsafe {
+        sys::cuMemcpyAsync(
+            dst.as_device_ptr(),
+            src.as_device_ptr(),
+            byte_count,
+            stream.0,
+        )
+    }
+    .to_result()
 }
 
 pub unsafe fn copy_dtod<Dst, Src>(dst: &mut Dst, src: &Src, byte_count: usize) -> CudaResult<()>
@@ -213,7 +220,7 @@ where
 pub unsafe fn copy_dtod_async<Dst, Src>(
     dst: &mut Dst,
     src: &Src,
-    bytesize: usize,
+    byte_count: usize,
     stream: &Stream,
 ) -> CudaResult<()>
 where
@@ -221,7 +228,12 @@ where
     Src: DeviceAccessible,
 {
     unsafe {
-        sys::cuMemcpyDtoDAsync_v2(dst.as_device_ptr(), src.as_device_ptr(), bytesize, stream.0)
+        sys::cuMemcpyDtoDAsync_v2(
+            dst.as_device_ptr(),
+            src.as_device_ptr(),
+            byte_count,
+            stream.0,
+        )
     }
     .to_result()
 }
@@ -237,15 +249,17 @@ where
 pub unsafe fn copy_dtoh_async<Dst, Src>(
     dst: &mut Dst,
     src: &Src,
-    bytesize: usize,
+    byte_count: usize,
     stream: &Stream,
 ) -> CudaResult<()>
 where
     Dst: HostAccessible,
     Src: DeviceAccessible,
 {
-    unsafe { sys::cuMemcpyDtoHAsync_v2(dst.as_host_ptr(), src.as_device_ptr(), bytesize, stream.0) }
-        .to_result()
+    unsafe {
+        sys::cuMemcpyDtoHAsync_v2(dst.as_host_ptr(), src.as_device_ptr(), byte_count, stream.0)
+    }
+    .to_result()
 }
 
 pub unsafe fn copy_htod<Dst, Src>(dst: &mut Dst, src: &Src, byte_count: usize) -> CudaResult<()>
@@ -259,15 +273,17 @@ where
 pub unsafe fn copy_htod_async<Dst, Src>(
     dst: &mut Dst,
     src: &Src,
-    bytesize: usize,
+    byte_count: usize,
     stream: &Stream,
 ) -> CudaResult<()>
 where
     Dst: DeviceAccessible,
     Src: HostAccessible,
 {
-    unsafe { sys::cuMemcpyHtoDAsync_v2(dst.as_device_ptr(), src.as_host_ptr(), bytesize, stream.0) }
-        .to_result()
+    unsafe {
+        sys::cuMemcpyHtoDAsync_v2(dst.as_device_ptr(), src.as_host_ptr(), byte_count, stream.0)
+    }
+    .to_result()
 }
 
 pub unsafe fn set_d8<Dst>(ptr: &mut Dst, value: u8, num_elements: usize) -> CudaResult<()>
