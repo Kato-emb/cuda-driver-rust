@@ -106,7 +106,7 @@ pub unsafe fn malloc_unified(
 }
 
 pub unsafe fn advise(
-    device_ptr: UnifiedDevicePtr,
+    device_ptr: &UnifiedDevicePtr,
     count: usize,
     advice: Advice,
     location: Location,
@@ -115,10 +115,10 @@ pub unsafe fn advise(
 }
 
 pub unsafe fn prefetch_async(
-    device_ptr: UnifiedDevicePtr,
+    device_ptr: &UnifiedDevicePtr,
     count: usize,
     location: Location,
-    stream: Stream,
+    stream: &Stream,
 ) -> CudaResult<()> {
     let flags = PrefetchFlags::_ZERO;
     unsafe { sys::cuMemPrefetchAsync_v2(device_ptr.0, count, location.0, flags.bits(), stream.0) }
@@ -127,7 +127,7 @@ pub unsafe fn prefetch_async(
 
 pub unsafe fn range_get_attribute<T: Sized>(
     attribute: RangeAttribute,
-    device_ptr: UnifiedDevicePtr,
+    device_ptr: &UnifiedDevicePtr,
     count: usize,
 ) -> CudaResult<T> {
     let mut data = std::mem::MaybeUninit::<T>::uninit();
@@ -151,7 +151,7 @@ pub unsafe fn range_get_attributes() {}
 
 pub unsafe fn pointer_get_attribute<T>(
     attribute: PointerAttribute,
-    device_ptr: UnifiedDevicePtr,
+    device_ptr: &UnifiedDevicePtr,
 ) -> CudaResult<T> {
     let mut data = std::mem::MaybeUninit::<T>::uninit();
 
@@ -172,7 +172,7 @@ pub unsafe fn pointer_get_attributes() {}
 pub unsafe fn pointer_set_attribute<T>(
     value: &T,
     attribute: PointerAttribute,
-    device_ptr: UnifiedDevicePtr,
+    device_ptr: &mut UnifiedDevicePtr,
 ) -> CudaResult<()> {
     unsafe {
         sys::cuPointerSetAttribute(
