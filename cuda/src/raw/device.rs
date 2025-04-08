@@ -5,6 +5,8 @@ use cuda_sys::ffi as sys;
 use crate::error::{CudaResult, ToResult};
 use crate::{wrap_sys_enum, wrap_sys_handle};
 
+use super::context::green::{Resource, ResourceType};
+
 wrap_sys_handle!(Device, sys::CUdevice);
 
 impl std::fmt::Debug for Device {
@@ -275,6 +277,14 @@ pub unsafe fn get_pci_bus_id(device: Device) -> CudaResult<String> {
 pub unsafe fn register_async_notification() {}
 pub unsafe fn unregister_async_notification() {}
 
+pub unsafe fn get_resource(device: Device, resource_type: ResourceType) -> CudaResult<Resource> {
+    let mut resource = MaybeUninit::uninit();
+    unsafe { sys::cuDeviceGetDevResource(device.0, resource.as_mut_ptr(), resource_type.into()) }
+        .to_result()?;
+
+    Ok(Resource(unsafe { resource.assume_init() }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,6 +380,58 @@ mod tests {
         assert!(
             result.is_ok(),
             "CUDA device retrieval by PCI bus ID failed: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_cuda_raw_device_get_attribute() {
+        unsafe { init(InitFlags::_ZERO) }.unwrap();
+
+        let device = unsafe { get_device(0).unwrap() };
+        let result = unsafe { get_attribute(DeviceAttribute::MaxThreadsPerBlock, device) };
+        assert!(
+            result.is_ok(),
+            "CUDA device attribute retrieval failed: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_cuda_raw_device_get_exec_affinity_support() {
+        unsafe { init(InitFlags::_ZERO) }.unwrap();
+
+        let device = unsafe { get_device(0).unwrap() };
+        let result = unsafe { get_exec_affinity_support(AffinityType::SmCount, device) };
+        assert!(
+            result.is_ok(),
+            "CUDA device execution affinity support retrieval failed: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_cuda_raw_device_get_exec_affinity_support_invalid() {
+        unsafe { init(InitFlags::_ZERO) }.unwrap();
+
+        let device = unsafe { get_device(0).unwrap() };
+        let result = unsafe { get_exec_affinity_support(AffinityType::Max, device) };
+        assert!(
+            result.is_err(),
+            "CUDA device execution affinity support retrieval should fail: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_cuda_raw_device_get_resource() {
+        unsafe { init(InitFlags::_ZERO) }.unwrap();
+
+        let device = unsafe { get_device(0).unwrap() };
+        let result = unsafe { get_resource(device, ResourceType::Sm) };
+        assert!(
+            result.is_ok(),
+            "CUDA device resource retrieval failed: {:?}",
             result
         );
     }

@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    context::{Context, GreenContext},
+    context::{Context, green::GreenContext},
     device::Device,
     event::{Event, EventWaitFlags},
 };
@@ -57,9 +57,10 @@ pub unsafe fn get_context(stream: Stream) -> CudaResult<(Context, Option<GreenCo
     let ctx = unsafe { ctx.assume_init() };
     let green_ctx = unsafe { green_ctx.assume_init() };
 
-    match green_ctx.is_null() {
-        true => Ok((Context(ctx), None)),
-        false => Ok((Context(ctx), Some(GreenContext(green_ctx)))),
+    if green_ctx.is_null() {
+        Ok((Context(ctx), None))
+    } else {
+        Ok((Context(ctx), Some(GreenContext(green_ctx))))
     }
 }
 

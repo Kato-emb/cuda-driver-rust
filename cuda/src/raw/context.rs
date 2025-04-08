@@ -1,6 +1,7 @@
 use std::mem::MaybeUninit;
 
 use cuda_sys::ffi as sys;
+use green::{GreenContext, Resource, ResourceType};
 
 use crate::{
     error::{CudaResult, ToResult},
@@ -9,6 +10,7 @@ use crate::{
 
 use super::{device::Device, event::Event};
 
+pub mod green;
 pub mod primary;
 
 wrap_sys_handle!(Context, sys::CUcontext);
@@ -18,8 +20,6 @@ impl std::fmt::Debug for Context {
         f.debug_struct("Context").field("handle", &self.0).finish()
     }
 }
-
-wrap_sys_handle!(GreenContext, sys::CUgreenCtx);
 
 wrap_sys_handle!(AffinityParam, sys::CUexecAffinityParam);
 wrap_sys_handle!(AffinitySmCount, sys::CUexecAffinitySmCount);
@@ -226,6 +226,21 @@ pub unsafe fn get_stream_priority_range() -> CudaResult<(i32, i32)> {
     unsafe { sys::cuCtxGetStreamPriorityRange(&mut min, &mut max) }.to_result()?;
 
     Ok((min, max))
+}
+
+pub unsafe fn from_green_ctx(green_ctx: GreenContext) -> CudaResult<Context> {
+    let mut ctx = MaybeUninit::uninit();
+    unsafe { sys::cuCtxFromGreenCtx(ctx.as_mut_ptr(), green_ctx.0) }.to_result()?;
+
+    Ok(Context(unsafe { ctx.assume_init() }))
+}
+
+pub unsafe fn get_resource(ctx: Context, resource_type: ResourceType) -> CudaResult<Resource> {
+    let mut resource = MaybeUninit::uninit();
+    unsafe { sys::cuCtxGetDevResource(ctx.0, resource.as_mut_ptr(), resource_type.into()) }
+        .to_result()?;
+
+    Ok(Resource(unsafe { resource.assume_init() }))
 }
 
 #[cfg(test)]
