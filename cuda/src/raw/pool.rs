@@ -7,8 +7,9 @@ use crate::{
     wrap_sys_enum, wrap_sys_handle,
 };
 
-use super::memory::{
-    AccessDesc, AccessFlags, AllocationHandleType, Location, ShareableHandleFlags,
+use super::{
+    ipc::ShareableHandle,
+    memory::{AccessDesc, AccessFlags, AllocationHandleType, Location, ShareableHandleFlags},
 };
 
 wrap_sys_handle!(MemoryPool, sys::CUmemoryPool);
@@ -90,20 +91,6 @@ pub unsafe fn set_attribute<T>(
 
 pub unsafe fn trim_to(pool: MemoryPool, keep: usize) -> CudaResult<()> {
     unsafe { sys::cuMemPoolTrimTo(pool.0, keep) }.to_result()
-}
-
-pub trait ShareableHandle {
-    fn as_ptr(&self) -> *mut std::ffi::c_void;
-}
-
-#[cfg(target_os = "linux")]
-impl<T> ShareableHandle for T
-where
-    T: std::os::fd::AsRawFd,
-{
-    fn as_ptr(&self) -> *mut std::ffi::c_void {
-        self.as_raw_fd() as *mut std::ffi::c_void
-    }
 }
 
 pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(

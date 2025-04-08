@@ -4,12 +4,22 @@ use cuda_sys::ffi as sys;
 
 use crate::{
     error::{CudaResult, ToResult},
+    raw::ipc::ShareableHandle,
     wrap_sys_enum, wrap_sys_handle,
 };
 
 use super::{
-    AccessDesc, AccessFlags, AllocationHandleType, DevicePtr, Location, ShareableHandleFlags,
+    AccessDesc, AccessFlags, AllocationHandleType, DeviceAccessible, DevicePtr, Location,
+    ShareableHandleFlags,
 };
+
+wrap_sys_handle!(VirtualDevicePtr, sys::CUdeviceptr);
+
+impl DeviceAccessible for VirtualDevicePtr {
+    fn as_device_ptr(&self) -> sys::CUdeviceptr {
+        self.0
+    }
+}
 
 wrap_sys_handle!(DeviceHandle, sys::CUmemGenericAllocationHandle);
 
@@ -66,15 +76,15 @@ pub unsafe fn address_reserve(
     alignment: usize,
     addr: DevicePtr,
     flags: AddressReserveFlags,
-) -> CudaResult<DevicePtr> {
+) -> CudaResult<VirtualDevicePtr> {
     let mut ptr = 0;
     unsafe { sys::cuMemAddressReserve(&mut ptr, size, alignment, addr.0, flags.bits()) }
         .to_result()?;
 
-    Ok(DevicePtr(ptr))
+    Ok(VirtualDevicePtr(ptr))
 }
 
-pub unsafe fn address_free(ptr: DevicePtr, size: usize) -> CudaResult<()> {
+pub unsafe fn address_free(ptr: VirtualDevicePtr, size: usize) -> CudaResult<()> {
     unsafe { sys::cuMemAddressFree(ptr.0, size) }.to_result()
 }
 
@@ -90,25 +100,26 @@ pub unsafe fn create(
     Ok(DeviceHandle(device_handle))
 }
 
-pub unsafe fn retain<T>(addr: &T) -> CudaResult<DeviceHandle> {
-    let mut device_handle = 0;
-    unsafe {
-        sys::cuMemRetainAllocationHandle(
-            &mut device_handle,
-            addr as *const _ as *mut std::ffi::c_void,
-        )
-    }
-    .to_result()?;
+// ToDo. addrの元パラメータが何かわからない
+// pub unsafe fn retain<T>(addr: &T) -> CudaResult<DeviceHandle> {
+//     let mut device_handle = 0;
+//     unsafe {
+//         sys::cuMemRetainAllocationHandle(
+//             &mut device_handle,
+//             addr as *const _ as *mut std::ffi::c_void,
+//         )
+//     }
+//     .to_result()?;
 
-    Ok(DeviceHandle(device_handle))
-}
+//     Ok(DeviceHandle(device_handle))
+// }
 
 pub unsafe fn release(handle: DeviceHandle) -> CudaResult<()> {
     unsafe { sys::cuMemRelease(handle.0) }.to_result()
 }
 
 pub unsafe fn map(
-    device_ptr: DevicePtr,
+    device_ptr: VirtualDevicePtr,
     size: usize,
     offset: usize,
     device_handle: DeviceHandle,
@@ -117,16 +128,16 @@ pub unsafe fn map(
     unsafe { sys::cuMemMap(device_ptr.0, size, offset, device_handle.0, flags.bits()) }.to_result()
 }
 
-pub unsafe fn unmap(device_ptr: DevicePtr, size: usize) -> CudaResult<()> {
+pub unsafe fn unmap(device_ptr: VirtualDevicePtr, size: usize) -> CudaResult<()> {
     unsafe { sys::cuMemUnmap(device_ptr.0, size) }.to_result()
 }
 
-pub unsafe fn export_to_shareable_handle<T>(
+pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(
     device_handle: &DeviceHandle,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
-) -> CudaResult<T> {
-    let mut handle = MaybeUninit::<T>::uninit();
+) -> CudaResult<Handle> {
+    let mut handle = MaybeUninit::<Handle>::uninit();
     unsafe {
         sys::cuMemExportToShareableHandle(
             handle.as_mut_ptr() as *mut std::ffi::c_void,
@@ -140,15 +151,15 @@ pub unsafe fn export_to_shareable_handle<T>(
     Ok(unsafe { handle.assume_init() })
 }
 
-pub unsafe fn import_from_shareable_handle<T>(
-    os_handle: &T,
+pub unsafe fn import_from_shareable_handle<Handle: ShareableHandle>(
+    os_handle: &Handle,
     handle_type: AllocationHandleType,
 ) -> CudaResult<DeviceHandle> {
     let mut device_handle = 0;
     unsafe {
         sys::cuMemImportFromShareableHandle(
             &mut device_handle,
-            os_handle as *const _ as *mut std::ffi::c_void,
+            os_handle.as_ptr(),
             handle_type.into(),
         )
     }
@@ -157,7 +168,10 @@ pub unsafe fn import_from_shareable_handle<T>(
     Ok(DeviceHandle(device_handle))
 }
 
-pub unsafe fn get_access(location: &Location, device_ptr: DevicePtr) -> CudaResult<AccessFlags> {
+pub unsafe fn get_access(
+    location: &Location,
+    device_ptr: VirtualDevicePtr,
+) -> CudaResult<AccessFlags> {
     let mut flags: sys::CUmemAccess_flags = unsafe { std::mem::zeroed() };
     unsafe {
         sys::cuMemGetAccess(
@@ -172,7 +186,7 @@ pub unsafe fn get_access(location: &Location, device_ptr: DevicePtr) -> CudaResu
 }
 
 pub unsafe fn set_access(
-    device_ptr: DevicePtr,
+    device_ptr: VirtualDevicePtr,
     size: usize,
     desc: &[AccessDesc],
 ) -> CudaResult<()> {
@@ -212,7 +226,6 @@ mod tests {
         memory::{AllocationType, LocationType},
     };
 
-    // ToDo. importで`CUDA_ERROR_INVALID_DEVICE`が発生する。
     #[test]
     fn test_cuda_raw_memory_vmm_mapping() {
         unsafe { init::init(init::InitFlags::_ZERO) }.unwrap();
@@ -266,6 +279,7 @@ mod tests {
         let import_handle =
             unsafe { import_from_shareable_handle::<i32>(&fd, AllocationHandleType::PosixFD) }
                 .unwrap();
+        println!("Imported handle: {:?}", import_handle);
         unsafe { release(import_handle) }.unwrap();
 
         let result = unsafe { unmap(reserve_ptr, page_size) };
