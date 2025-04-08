@@ -51,3 +51,5 @@ impl ToResult for cuda_sys::ffi::CUresult {
         }
     }
 }
+
+pub type DropResult<T> = Result<(), (T, CudaError)>;
