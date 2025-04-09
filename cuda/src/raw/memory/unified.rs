@@ -15,13 +15,13 @@ impl DeviceAccessible for UnifiedDevicePtr {
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
     }
-}
 
-impl DeviceManaged for UnifiedDevicePtr {
-    fn null() -> Self {
-        UnifiedDevicePtr(0)
+    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
+        UnifiedDevicePtr(ptr)
     }
 }
+
+impl DeviceManaged for UnifiedDevicePtr {}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

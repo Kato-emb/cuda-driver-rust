@@ -22,13 +22,13 @@ impl HostAccessible for PinnedHostPtr {
     fn as_host_ptr(&self) -> *mut std::ffi::c_void {
         self.0
     }
-}
 
-impl HostManaged for PinnedHostPtr {
-    fn null() -> Self {
-        PinnedHostPtr(std::ptr::null_mut())
+    unsafe fn from_raw_ptr(ptr: *mut std::ffi::c_void) -> Self {
+        PinnedHostPtr(ptr)
     }
 }
+
+impl HostManaged for PinnedHostPtr {}
 
 wrap_sys_handle!(PinnedDevicePtr, sys::CUdeviceptr);
 
@@ -36,6 +36,10 @@ impl DeviceAccessible for PinnedDevicePtr {
     #[inline(always)]
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
+    }
+
+    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
+        PinnedDevicePtr(ptr)
     }
 }
 

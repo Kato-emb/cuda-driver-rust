@@ -19,6 +19,10 @@ impl DeviceAccessible for VirtualDevicePtr {
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
     }
+
+    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
+        VirtualDevicePtr(ptr)
+    }
 }
 
 wrap_sys_handle!(DeviceHandle, sys::CUmemGenericAllocationHandle);

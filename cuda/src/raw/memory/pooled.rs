@@ -17,13 +17,13 @@ impl DeviceAccessible for PooledDevicePtr {
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
     }
-}
 
-impl DeviceManaged for PooledDevicePtr {
-    fn null() -> Self {
-        PooledDevicePtr(0)
+    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
+        PooledDevicePtr(ptr)
     }
 }
+
+impl DeviceManaged for PooledDevicePtr {}
 
 wrap_sys_handle!(PooledPtrExportData, sys::CUmemPoolPtrExportData);
 
