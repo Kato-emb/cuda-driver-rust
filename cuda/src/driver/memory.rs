@@ -7,8 +7,8 @@ use super::stream::CudaStream;
 // pub mod device;
 // pub mod ordered;
 // pub mod pool;
-pub mod pinned;
-pub mod unified;
+// pub mod pinned;
+// pub mod unified;
 
 pub unsafe trait DeviceRepr: Copy + 'static {}
 unsafe impl DeviceRepr for bool {}
@@ -27,162 +27,85 @@ unsafe impl DeviceRepr for usize {}
 unsafe impl DeviceRepr for f32 {}
 unsafe impl DeviceRepr for f64 {}
 
+pub struct CudaDevicePointer<Repr: DeviceRepr, Ptr: DeviceAccessible> {
+    inner: Ptr,
+    _marker: std::marker::PhantomData<*mut Repr>,
+}
+
+impl<Repr: DeviceRepr, Ptr: DeviceAccessible> std::fmt::Debug for CudaDevicePointer<Repr, Ptr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ptr = self.inner.as_device_ptr() as *const std::ffi::c_void;
+        std::fmt::Pointer::fmt(&ptr, f)
+    }
+}
+
+impl<Repr: DeviceRepr, Ptr: DeviceAccessible> CudaDevicePointer<Repr, Ptr> {
+    pub fn new(inner: Ptr) -> Self {
+        CudaDevicePointer {
+            inner,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn as_ptr(&self) -> *const Repr {
+        self.inner.as_device_ptr() as *const Repr
+    }
+
+    pub fn as_mut_ptr(&mut self) -> *mut Repr {
+        self.inner.as_device_ptr() as *mut Repr
+    }
+
+    pub fn as_raw_ptr(&self) -> u64 {
+        self.inner.as_device_ptr()
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.inner.as_device_ptr() == 0
+    }
+
+    pub fn null() -> Self {
+        CudaDevicePointer {
+            inner: unsafe { Ptr::from_raw_ptr(0) },
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub unsafe fn offset(self, count: isize) -> Self {
+        let base = self.inner.as_device_ptr();
+
+        let byte_offset = count
+            .checked_mul(std::mem::size_of::<Repr>() as isize)
+            .unwrap_or(0);
+
+        let inner = if byte_offset > 0 {
+            let ptr = base.checked_add(byte_offset as u64).unwrap_or(base);
+            unsafe { Ptr::from_raw_ptr(ptr) }
+        } else {
+            let ptr = base.checked_sub(byte_offset.abs() as u64).unwrap_or(base);
+            unsafe { Ptr::from_raw_ptr(ptr) }
+        };
+
+        CudaDevicePointer {
+            inner,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct CudaDevicePointer<'a, T: DeviceRepr, Ptr: DeviceAccessible> {
-    ptr: Ptr,
+pub struct CudaDeviceBuffer<Repr: DeviceRepr, Ptr: DeviceManaged> {
+    ptr: CudaDevicePointer<Repr, Ptr>,
     size: usize,
-    _marker: std::marker::PhantomData<&'a T>,
 }
 
-#[derive(Debug)]
-pub struct CudaHostPointer<'a, T, Ptr: HostAccessible> {
-    ptr: Ptr,
-    size: usize,
-    _marker: std::marker::PhantomData<&'a T>,
-}
-
-impl<T: DeviceRepr, Ptr: DeviceAccessible> CudaDevicePointer<'_, T, Ptr> {
-    pub fn copy_from_device<Src: DeviceAccessible>(
-        &mut self,
-        src: &CudaDevicePointer<T, Src>,
-        len: usize,
-    ) -> CudaResult<()> {
-        let byte_count = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        unsafe { copy_dtod(&mut self.ptr, &src.ptr, byte_count) }
-    }
-
-    pub fn copy_from_device_async<Src: DeviceAccessible>(
-        &mut self,
-        src: &CudaDevicePointer<T, Src>,
-        len: usize,
-        stream: &CudaStream,
-    ) -> CudaResult<()> {
-        let byte_count = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        unsafe { copy_dtod_async(&mut self.ptr, &src.ptr, byte_count, &stream.inner) }
-    }
-
-    pub fn copy_from_host<Src: HostAccessible>(
-        &mut self,
-        src: &CudaHostPointer<T, Src>,
-        len: usize,
-    ) -> CudaResult<()> {
-        let byte_count = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        unsafe { copy_htod(&mut self.ptr, &src.ptr, byte_count) }
-    }
-
-    pub fn copy_from_host_async<Src: HostAccessible>(
-        &mut self,
-        src: &CudaHostPointer<T, Src>,
-        len: usize,
-        stream: &CudaStream,
-    ) -> CudaResult<()> {
-        let byte_count = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        unsafe { copy_htod_async(&mut self.ptr, &src.ptr, byte_count, &stream.inner) }
-    }
-
-    pub fn len(&self) -> usize {
-        self.size.wrapping_div(std::mem::size_of::<T>())
-    }
-}
-
-impl<Ptr: DeviceAccessible> CudaDevicePointer<'_, u8, Ptr> {
-    pub fn set_u8(&mut self, value: u8, count: usize) -> CudaResult<()> {
-        debug_assert!(count <= self.len());
-        unsafe { set_d8(&mut self.ptr, value, count) }
-    }
-
-    pub fn set_u8_async(&mut self, value: u8, count: usize, stream: &CudaStream) -> CudaResult<()> {
-        debug_assert!(count <= self.len());
-        unsafe { set_d8_async(&mut self.ptr, value, count, &stream.inner) }
-    }
-}
-
-impl<Ptr: DeviceAccessible> CudaDevicePointer<'_, u16, Ptr> {
-    pub fn set_u16(&mut self, value: u16, count: usize) -> CudaResult<()> {
-        debug_assert!(count <= self.len());
-        unsafe { set_d16(&mut self.ptr, value, count) }
-    }
-
-    pub fn set_u16_async(
-        &mut self,
-        value: u16,
-        count: usize,
-        stream: &CudaStream,
-    ) -> CudaResult<()> {
-        debug_assert!(count <= self.len());
-        unsafe { set_d16_async(&mut self.ptr, value, count, &stream.inner) }
-    }
-}
-
-impl<Ptr: DeviceAccessible> CudaDevicePointer<'_, u32, Ptr> {
-    pub fn set_u32(&mut self, value: u32, count: usize) -> CudaResult<()> {
-        debug_assert!(count <= self.len(), "count: {}, len: {}", count, self.len());
-        unsafe { set_d32(&mut self.ptr, value, count) }
-    }
-
-    pub fn set_u32_async(
-        &mut self,
-        value: u32,
-        count: usize,
-        stream: &CudaStream,
-    ) -> CudaResult<()> {
-        debug_assert!(count <= self.len());
-        unsafe { set_d32_async(&mut self.ptr, value, count, &stream.inner) }
-    }
-}
-
-impl<T: DeviceRepr, Ptr: HostAccessible> CudaHostPointer<'_, T, Ptr> {
-    pub fn copy_from_device<Src: DeviceAccessible>(
-        &mut self,
-        src: &CudaDevicePointer<T, Src>,
-        len: usize,
-    ) -> CudaResult<()> {
-        let byte_count = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        unsafe { copy_dtoh(&mut self.ptr, &src.ptr, byte_count) }
-    }
-
-    pub fn copy_from_device_async<Src: DeviceAccessible>(
-        &mut self,
-        src: &CudaDevicePointer<T, Src>,
-        len: usize,
-        stream: &CudaStream,
-    ) -> CudaResult<()> {
-        let byte_count = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        unsafe { copy_dtoh_async(&mut self.ptr, &src.ptr, byte_count, &stream.inner) }
-    }
-
-    pub fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.ptr.as_host_ptr() as *const T, self.len()) }
-    }
-
-    pub fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_host_ptr() as *mut T, self.len()) }
-    }
-
-    pub fn len(&self) -> usize {
-        self.size.wrapping_div(std::mem::size_of::<T>())
-    }
-}
-
-#[derive(Debug)]
-pub struct CudaDevicePointerOwned<T: DeviceRepr, Ptr: DeviceManaged> {
-    pub(crate) inner: CudaDevicePointer<'static, T, Ptr>,
-}
-
-impl<T: DeviceRepr, Ptr: DeviceManaged> Drop for CudaDevicePointerOwned<T, Ptr> {
+impl<T: DeviceRepr, Ptr: DeviceManaged> Drop for CudaDeviceBuffer<T, Ptr> {
     fn drop(&mut self) {
-        if self.inner.ptr.as_device_ptr() == 0 {
+        if self.ptr.is_null() {
             return;
         }
 
-        let ptr = std::mem::replace(&mut self.inner.ptr, Ptr::null());
-        let old = Self {
-            inner: CudaDevicePointer {
-                ptr,
-                size: 0,
-                _marker: std::marker::PhantomData,
-            },
-        };
+        let ptr = std::mem::replace(&mut self.ptr, CudaDevicePointer::null());
+        let old = Self { ptr, size: 0 };
 
         if let Err((_, e)) = old.free() {
             log::error!("Failed to free CUDA device pointer: {:?}", e);
@@ -190,23 +113,9 @@ impl<T: DeviceRepr, Ptr: DeviceManaged> Drop for CudaDevicePointerOwned<T, Ptr> 
     }
 }
 
-impl<T: DeviceRepr, Ptr: DeviceManaged> std::ops::Deref for CudaDevicePointerOwned<T, Ptr> {
-    type Target = CudaDevicePointer<'static, T, Ptr>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: DeviceRepr, Ptr: DeviceManaged> std::ops::DerefMut for CudaDevicePointerOwned<T, Ptr> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl<T: DeviceRepr, Ptr: DeviceManaged> CudaDevicePointerOwned<T, Ptr> {
+impl<Repr: DeviceRepr, Ptr: DeviceManaged> CudaDeviceBuffer<Repr, Ptr> {
     pub fn free(mut self) -> DropResult<Self> {
-        match unsafe { free(&mut self.inner.ptr) } {
+        match unsafe { free(&mut self.ptr.inner) } {
             Ok(_) => {
                 // The pointer is now invalid, so we need to drop it.
                 std::mem::forget(self);
@@ -217,7 +126,7 @@ impl<T: DeviceRepr, Ptr: DeviceManaged> CudaDevicePointerOwned<T, Ptr> {
     }
 
     pub fn free_async(mut self, stream: &CudaStream) -> DropResult<Self> {
-        match unsafe { free_async(&mut self.inner.ptr, &stream.inner) } {
+        match unsafe { free_async(&mut self.ptr.inner, &stream.inner) } {
             Ok(_) => {
                 // The pointer is now invalid, so we need to drop it.
                 std::mem::forget(self);
@@ -228,86 +137,365 @@ impl<T: DeviceRepr, Ptr: DeviceManaged> CudaDevicePointerOwned<T, Ptr> {
     }
 }
 
-impl<T: DeviceRepr> CudaDevicePointerOwned<T, DevicePtr> {
+impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
     pub fn new(len: usize) -> CudaResult<Self> {
-        let bytesize = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
+        let bytesize = len.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
         let ptr = unsafe { malloc(bytesize) }?;
-        Ok(CudaDevicePointerOwned {
-            inner: CudaDevicePointer {
-                ptr,
-                size: bytesize,
-                _marker: std::marker::PhantomData,
-            },
+        Ok(Self {
+            ptr: CudaDevicePointer::new(ptr),
+            size: bytesize,
         })
     }
 
     pub fn new_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
-        let bytesize = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
+        let bytesize = len.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
         let ptr = unsafe { malloc_async(bytesize, stream.inner) }?;
-        Ok(CudaDevicePointerOwned {
-            inner: CudaDevicePointer {
-                ptr,
-                size: bytesize,
-                _marker: std::marker::PhantomData,
-            },
+        Ok(Self {
+            ptr: CudaDevicePointer::new(ptr),
+            size: bytesize,
         })
     }
 
     pub fn new_pitch(width: usize, height: usize) -> CudaResult<(Self, usize)> {
-        let element_size = std::mem::size_of::<T>().try_into().unwrap_or(0);
-        let width = width.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
+        let element_size = std::mem::size_of::<Repr>().try_into().unwrap_or(0);
+        let width = width.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
 
         let (ptr, pitch) = unsafe { malloc_pitch(width, height, element_size) }?;
         Ok((
-            CudaDevicePointerOwned {
-                inner: CudaDevicePointer {
-                    ptr,
-                    size: (pitch * height),
-                    _marker: std::marker::PhantomData,
-                },
+            Self {
+                ptr: CudaDevicePointer::new(ptr),
+                size: (pitch * height),
             },
             pitch,
         ))
     }
-
-    // pub fn address_range(&self) -> CudaResult<>
 }
+
+pub struct CudaDeviceSlice<Repr: DeviceRepr, Ptr: DeviceAccessible> {
+    ptr: CudaDevicePointer<Repr, Ptr>,
+    offset: isize,
+    len: usize,
+}
+
+// pub trait AccessibleSlice<Repr, Ptr> {
+//     fn as_ptr(&self) -> Ptr;
+//     fn len(&self) -> usize;
+// }
+
+// #[derive(Debug)]
+// pub struct CudaDevicePointer<Repr: DeviceRepr, Ptr: DeviceAccessible> {
+//     inner: Ptr,
+//     _marker: std::marker::PhantomData<Repr>,
+// }
+
+// #[derive(Debug)]
+// pub struct CudaDeviceSlice<'a, Repr: DeviceRepr, Ptr: DeviceAccessible> {
+//     ptr: &'a CudaDevicePointer<Repr, Ptr>,
+//     offset: isize,
+//     len: usize,
+// }
+
+// impl<Repr: DeviceRepr, Ptr: DeviceAccessible> AccessibleSlice<Repr, Ptr>
+//     for CudaDeviceSlice<'_, Repr, Ptr>
+// {
+//     fn as_ptr(&self) -> Ptr {
+//         let base = self.ptr.inner.as_device_ptr();
+//         let byte_offset = self
+//             .offset
+//             .checked_mul(std::mem::size_of::<Repr>() as isize)
+//             .unwrap_or(0);
+
+//         if byte_offset > 0 {
+//             let ptr = base.checked_add(byte_offset as u64).unwrap_or(base);
+//             Ptr::from_raw_ptr(ptr)
+//         } else {
+//             let ptr = base.checked_sub(byte_offset.abs() as u64).unwrap_or(base);
+//             Ptr::from_raw_ptr(ptr)
+//         }
+//     }
+
+//     fn len(&self) -> usize {
+//         self.len
+//     }
+// }
+
+// #[derive(Debug)]
+// pub struct CudaDeviceSliceMut<'a, Repr: DeviceRepr, Ptr: DeviceAccessible> {
+//     ptr: &'a mut CudaDevicePointer<Repr, Ptr>,
+//     offset: isize,
+//     len: usize,
+// }
+
+// impl<Repr: DeviceRepr, Ptr: DeviceAccessible> AccessibleSlice<Repr, Ptr>
+//     for CudaDeviceSliceMut<'_, Repr, Ptr>
+// {
+//     fn as_ptr(&self) -> Ptr {
+//         self.inner.as_ptr()
+//     }
+
+//     fn len(&self) -> usize {
+//         self.inner.len()
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Ptr: DeviceAccessible> std::ops::Deref
+//     for CudaDeviceSliceMut<'_, Repr, Ptr>
+// {
+//     type Target = CudaDeviceSliceInner<Repr, Ptr>;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Ptr: DeviceAccessible> std::ops::DerefMut
+//     for CudaDeviceSliceMut<'_, Repr, Ptr>
+// {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.inner
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceInner<Repr, Dst> {
+//     pub fn copy_from_device<Src>(&mut self, src: &impl AccessibleSlice<Repr, Src>) -> CudaResult<()>
+//     where
+//         Src: DeviceAccessible,
+//     {
+//         debug_assert!(src.len() <= self.len());
+
+//         let byte_count = src
+//             .len()
+//             .checked_mul(std::mem::size_of::<Repr>())
+//             .unwrap_or(0);
+//         unsafe { copy_dtod(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
+//     }
+
+//     pub fn copy_from_device_async<Src>(
+//         &mut self,
+//         src: &impl AccessibleSlice<Repr, Src>,
+//         stream: &CudaStream,
+//     ) -> CudaResult<()>
+//     where
+//         Src: DeviceAccessible,
+//     {
+//         debug_assert!(src.len() <= self.len());
+
+//         let byte_count = src
+//             .len()
+//             .checked_mul(std::mem::size_of::<Repr>())
+//             .unwrap_or(0);
+//         unsafe { copy_dtod_async(&mut self.ptr, &src.as_ptr(), byte_count, &stream.inner) }
+//     }
+
+//     pub fn copy_from_host<Src>(&mut self, src: &impl AccessibleSlice<Repr, Src>) -> CudaResult<()>
+//     where
+//         Src: HostAccessible,
+//     {
+//         debug_assert!(src.len() <= self.len());
+
+//         let byte_count = src
+//             .len()
+//             .checked_mul(std::mem::size_of::<Repr>())
+//             .unwrap_or(0);
+//         unsafe { copy_htod(&mut self.ptr, &src.as_ptr(), byte_count) }
+//     }
+
+//     pub fn copy_from_host_async<Src>(
+//         &mut self,
+//         src: &impl AccessibleSlice<Repr, Src>,
+//         stream: &CudaStream,
+//     ) -> CudaResult<()>
+//     where
+//         Src: HostAccessible,
+//     {
+//         debug_assert!(src.len() <= self.len());
+
+//         let byte_count = src
+//             .len()
+//             .checked_mul(std::mem::size_of::<Repr>())
+//             .unwrap_or(0);
+//         unsafe { copy_htod_async(&mut self.ptr, &src.as_ptr(), byte_count, &stream.inner) }
+//     }
+
+//     pub fn set(&mut self, value: Repr) -> CudaResult<()> {
+//         let size = std::mem::size_of::<Repr>();
+
+//         match size {
+//             1 => unsafe {
+//                 let bits = std::mem::transmute_copy::<Repr, u8>(&value);
+//                 set_d8(&mut self.ptr, bits, self.len)
+//             },
+//             2 => unsafe {
+//                 let bits = std::mem::transmute_copy::<Repr, u16>(&value);
+//                 set_d16(&mut self.ptr, bits, self.len)
+//             },
+//             4 => unsafe {
+//                 let bits = std::mem::transmute_copy::<Repr, u32>(&value);
+//                 set_d32(&mut self.ptr, bits, self.len)
+//             },
+//             _ => panic!("Unsupported size: {}", size),
+//         }
+//     }
+
+//     pub fn set_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
+//         let size = std::mem::size_of::<Repr>();
+
+//         match size {
+//             1 => unsafe {
+//                 let bits = std::mem::transmute_copy::<Repr, u8>(&value);
+//                 set_d8_async(&mut self.ptr, bits, self.len, &stream.inner)
+//             },
+//             2 => unsafe {
+//                 let bits = std::mem::transmute_copy::<Repr, u16>(&value);
+//                 set_d16_async(&mut self.ptr, bits, self.len, &stream.inner)
+//             },
+//             4 => unsafe {
+//                 let bits = std::mem::transmute_copy::<Repr, u32>(&value);
+//                 set_d32_async(&mut self.ptr, bits, self.len, &stream.inner)
+//             },
+//             _ => panic!("Unsupported size: {}", size),
+//         }
+//     }
+// }
+
+// #[derive(Debug)]
+// pub struct CudaHostSliceInner<Repr: DeviceRepr, Ptr: HostAccessible> {
+//     ptr: Ptr,
+//     offset: isize,
+//     len: usize,
+//     _marker: std::marker::PhantomData<Repr>,
+// }
+
+// impl<Repr: DeviceRepr, Ptr: HostAccessible> AccessibleSlice<Repr, Ptr>
+//     for CudaHostSliceInner<Repr, Ptr>
+// {
+//     fn as_ptr(&self) -> Ptr {
+//         let base = self.ptr.as_host_ptr();
+//         Ptr::from_raw_ptr(unsafe { base.offset(self.offset) })
+//     }
+
+//     fn len(&self) -> usize {
+//         self.len
+//     }
+// }
+
+// #[derive(Debug)]
+// pub struct CudaHostSlice<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
+//     inner: &'a CudaHostSliceInner<Repr, Ptr>,
+// }
+
+// impl<Repr: DeviceRepr, Ptr: HostAccessible> AccessibleSlice<Repr, Ptr>
+//     for CudaHostSlice<'_, Repr, Ptr>
+// {
+//     fn as_ptr(&self) -> Ptr {
+//         self.inner.as_ptr()
+//     }
+
+//     fn len(&self) -> usize {
+//         self.inner.len()
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::Deref for CudaHostSlice<'_, Repr, Ptr> {
+//     type Target = CudaHostSliceInner<Repr, Ptr>;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
+
+// #[derive(Debug)]
+// pub struct CudaHostSliceMut<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
+//     inner: &'a mut CudaHostSliceInner<Repr, Ptr>,
+// }
+
+// impl<Repr: DeviceRepr, Ptr: HostAccessible> AccessibleSlice<Repr, Ptr>
+//     for CudaHostSliceMut<'_, Repr, Ptr>
+// {
+//     fn as_ptr(&self) -> Ptr {
+//         self.inner.as_ptr()
+//     }
+
+//     fn len(&self) -> usize {
+//         self.inner.len()
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::Deref for CudaHostSliceMut<'_, Repr, Ptr> {
+//     type Target = CudaHostSliceInner<Repr, Ptr>;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::DerefMut for CudaHostSliceMut<'_, Repr, Ptr> {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.inner
+//     }
+// }
+
+// impl<Repr: DeviceRepr, Dst: HostAccessible> CudaHostSliceInner<Repr, Dst> {
+//     pub fn copy_from_device<Src>(&mut self, src: &impl AccessibleSlice<Repr, Src>) -> CudaResult<()>
+//     where
+//         Src: DeviceAccessible,
+//     {
+//         debug_assert!(src.len() <= self.len());
+
+//         let byte_count = src
+//             .len()
+//             .checked_mul(std::mem::size_of::<Repr>())
+//             .unwrap_or(0);
+//         unsafe { copy_dtoh(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
+//     }
+
+//     pub fn copy_from_device_async<Src>(
+//         &mut self,
+//         src: &impl AccessibleSlice<Repr, Src>,
+//         stream: &CudaStream,
+//     ) -> CudaResult<()>
+//     where
+//         Src: DeviceAccessible,
+//     {
+//         debug_assert!(src.len() <= self.len());
+
+//         let byte_count = src
+//             .len()
+//             .checked_mul(std::mem::size_of::<Repr>())
+//             .unwrap_or(0);
+//         unsafe { copy_dtoh_async(&mut self.as_ptr(), &src.as_ptr(), byte_count, &stream.inner) }
+//     }
+
+//     pub fn as_slice(&self) -> &[Repr] {
+//         unsafe {
+//             std::slice::from_raw_parts(&self.as_ptr() as *const Dst as *const Repr, self.len())
+//         }
+//     }
+
+//     pub fn as_mut_slice(&mut self) -> &mut [Repr] {
+//         unsafe {
+//             std::slice::from_raw_parts_mut(&mut self.as_ptr() as *mut Dst as *mut Repr, self.len())
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        driver::{context::CudaPrimaryContext, device::CudaDevice},
-        raw::stream::StreamFlags,
-    };
+    use crate::driver::{context::CudaPrimaryContext, device::CudaDevice};
 
     use super::*;
 
     #[test]
-    fn test_cuda_driver_memory_alloc() {
+    fn test_cuda_driver_memory_malloc() {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
         let ctx = CudaPrimaryContext::new(device).unwrap();
         ctx.set_current().unwrap();
 
-        let stream = CudaStream::new(StreamFlags::DEFAULT).unwrap();
-
-        let bytesize = 1024;
-        let mut ptr = CudaDevicePointerOwned::new(bytesize).unwrap();
-        assert!(ptr.ptr.as_device_ptr() != 0);
-        let ptr2 = CudaDevicePointerOwned::new_async(bytesize, &stream).unwrap();
-        assert!(ptr2.ptr.as_device_ptr() != 0);
-        let (mut ptr3, pitch) = CudaDevicePointerOwned::new_pitch(1024, 768).unwrap();
-        assert!(ptr3.ptr.as_device_ptr() != 0);
-        assert!(pitch > 0);
-
-        ptr.set_u8(u8::MAX, 1024).unwrap();
-        ptr3.set_u32(u32::MAX, 256).unwrap();
-
-        ptr.copy_from_device(&ptr2, 1024).unwrap();
-        ptr.copy_from_device_async(&ptr2, 1024, &stream).unwrap();
-
-        ptr.free().unwrap();
-        ptr2.free_async(&stream).unwrap();
-        drop(ptr3);
+        let buffer = CudaDeviceBuffer::<u8, DevicePtr>::new(1024).unwrap();
+        assert!(
+            !buffer.ptr.is_null(),
+            "Failed to allocate CUDA device buffer"
+        );
     }
 }
