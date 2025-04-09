@@ -13,24 +13,22 @@ pub mod pooled;
 pub mod unified;
 pub mod vmm;
 
-pub trait DeviceAccessible {
+pub trait DeviceAccessible: Copy {
     fn as_device_ptr(&self) -> sys::CUdeviceptr;
+    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self;
 }
 
-pub trait HostAccessible {
+pub trait HostAccessible: Copy {
     fn as_host_ptr(&self) -> *mut std::ffi::c_void;
+    unsafe fn from_raw_ptr(ptr: *mut std::ffi::c_void) -> Self;
 }
 
 /// A trait for device pointers that are managed by CUDA.
 ///
 /// Deallocated by CUDA, call [free()] or [free_async()] to deallocate.
-pub trait DeviceManaged: DeviceAccessible {
-    fn null() -> Self;
-}
+pub trait DeviceManaged: DeviceAccessible {}
 
-pub trait HostManaged: HostAccessible {
-    fn null() -> Self;
-}
+pub trait HostManaged: HostAccessible {}
 
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
 
@@ -39,13 +37,13 @@ impl DeviceAccessible for DevicePtr {
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
     }
-}
 
-impl DeviceManaged for DevicePtr {
-    fn null() -> Self {
-        DevicePtr(0)
+    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
+        DevicePtr(ptr)
     }
 }
+
+impl DeviceManaged for DevicePtr {}
 
 impl std::fmt::Debug for DevicePtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
