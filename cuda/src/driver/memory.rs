@@ -376,13 +376,13 @@ impl<Repr: DeviceRepr, Dst: HostAccessible> CudaHostSliceMut<'_, Repr, Dst> {
 }
 
 #[derive(Debug)]
-pub struct CudaDeviceBuffer<Repr: DeviceRepr, Ptr: DeviceManaged> {
+pub struct CudaDeviceBuffer<Repr: DeviceRepr, Ptr: DeviceAllocated> {
     ptr: Ptr,
     size: usize,
     _marker: std::marker::PhantomData<*mut Repr>,
 }
 
-impl<Repr: DeviceRepr, Ptr: DeviceManaged> Drop for CudaDeviceBuffer<Repr, Ptr> {
+impl<Repr: DeviceRepr, Ptr: DeviceAllocated> Drop for CudaDeviceBuffer<Repr, Ptr> {
     fn drop(&mut self) {
         if self.ptr.as_device_ptr() == 0 {
             return;
@@ -403,7 +403,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceManaged> Drop for CudaDeviceBuffer<Repr, Ptr> 
     }
 }
 
-impl<Repr: DeviceRepr, Ptr: DeviceManaged> CudaDeviceBuffer<Repr, Ptr> {
+impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceBuffer<Repr, Ptr> {
     pub fn free(mut self) -> DropResult<Self> {
         match unsafe { free(&mut self.ptr) } {
             Ok(_) => {
