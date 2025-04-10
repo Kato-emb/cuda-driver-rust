@@ -446,7 +446,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceBuffer<Repr, Ptr> {
 }
 
 impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
-    pub fn new(len: usize) -> CudaResult<Self> {
+    pub fn alloc(len: usize) -> CudaResult<Self> {
         let bytesize = len.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
         let ptr = unsafe { malloc(bytesize) }?;
 
@@ -457,7 +457,7 @@ impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
         })
     }
 
-    pub fn new_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
+    pub fn alloc_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
         let bytesize = len.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
         let ptr = unsafe { malloc_async(bytesize, stream.inner) }?;
 
@@ -468,7 +468,7 @@ impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
         })
     }
 
-    pub fn new_pitch(width: usize, height: usize) -> CudaResult<(Self, usize)> {
+    pub fn alloc_pitch(width: usize, height: usize) -> CudaResult<(Self, usize)> {
         let element_size = std::mem::size_of::<Repr>().try_into().unwrap_or(0);
         let width = width.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
         let (ptr, pitch) = unsafe { malloc_pitch(width, height, element_size) }?;
@@ -497,7 +497,7 @@ mod tests {
         let ctx = CudaPrimaryContext::new(device).unwrap();
         ctx.set_current().unwrap();
 
-        let mut buffer = CudaDeviceBuffer::new(1024).unwrap();
+        let mut buffer = CudaDeviceBuffer::alloc(1024).unwrap();
         assert!(buffer.ptr.0 != 0, "Failed to allocate CUDA device buffer");
 
         let slice = buffer.as_mut_slice();

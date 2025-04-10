@@ -83,7 +83,7 @@ impl<Repr: DeviceRepr> CudaHostPinnedBuffer<Repr> {
         }
     }
 
-    pub fn new(len: usize) -> CudaResult<Self> {
+    pub fn alloc(len: usize) -> CudaResult<Self> {
         let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc_pinned(bytesize) }?;
 
@@ -94,7 +94,7 @@ impl<Repr: DeviceRepr> CudaHostPinnedBuffer<Repr> {
         })
     }
 
-    pub fn new_with_flags(len: usize, flags: PinnedFlags) -> CudaResult<Self> {
+    pub fn alloc_with_flags(len: usize, flags: PinnedFlags) -> CudaResult<Self> {
         let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc_pinned_with_flags(bytesize, flags) }?;
 
@@ -158,19 +158,14 @@ impl<Repr: DeviceRepr> Drop for CudaHostRegisteredBuffer<Repr> {
             _marker: std::marker::PhantomData,
         };
 
-        match old.unregister() {
-            Ok(vec) => {
-                drop(vec);
-            }
-            Err(e) => {
-                log::error!("Failed to unregister CUDA host pointer: {:?}", e);
-            }
+        if let Err(e) = old.unlock() {
+            log::error!("Failed to unregister CUDA host pointer: {:?}", e);
         }
     }
 }
 
 impl<Repr: DeviceRepr> CudaHostRegisteredBuffer<Repr> {
-    pub fn new(src: Vec<Repr>, flags: HostRegisterFlags) -> CudaResult<Self> {
+    pub fn lock_vec(src: Vec<Repr>, flags: HostRegisterFlags) -> CudaResult<Self> {
         let bytesize = std::mem::size_of::<Repr>() * src.capacity();
 
         let host_ptr = unsafe {
@@ -187,7 +182,7 @@ impl<Repr: DeviceRepr> CudaHostRegisteredBuffer<Repr> {
         })
     }
 
-    pub fn unregister(self) -> CudaResult<Vec<Repr>> {
+    pub fn unlock(self) -> CudaResult<Vec<Repr>> {
         unsafe { unregister(&self.ptr) }?;
         let len = self.size.wrapping_div(std::mem::size_of::<Repr>());
         let vec = unsafe { Vec::from_raw_parts(self.ptr.into_raw() as *mut Repr, len, len) };
@@ -226,7 +221,7 @@ mod tests {
         ctx.set_current().unwrap();
 
         let size = 1024;
-        let mut host_buffer = CudaHostPinnedBuffer::new(size).unwrap();
+        let mut host_buffer = CudaHostPinnedBuffer::alloc(size).unwrap();
         assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", host_buffer);
 
@@ -251,7 +246,7 @@ mod tests {
         ctx.set_current().unwrap();
 
         let size = 1024;
-        let mut host_buffer = CudaHostPinnedBuffer::new(size).unwrap();
+        let mut host_buffer = CudaHostPinnedBuffer::alloc(size).unwrap();
         assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", host_buffer);
 
@@ -276,7 +271,7 @@ mod tests {
         ctx.set_current().unwrap();
 
         let size = 1024;
-        let mut host_buffer = CudaHostPinnedBuffer::new(size).unwrap();
+        let mut host_buffer = CudaHostPinnedBuffer::alloc(size).unwrap();
         assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", host_buffer);
 
@@ -301,7 +296,7 @@ mod tests {
         ctx.set_current().unwrap();
 
         let bytesize = 1024;
-        let mut reg_buffer = CudaHostRegisteredBuffer::new(
+        let mut reg_buffer = CudaHostRegisteredBuffer::lock_vec(
             vec![0u32; bytesize],
             HostRegisterFlags::PORTABLE | HostRegisterFlags::DEVICEMAP,
         )
@@ -313,7 +308,7 @@ mod tests {
         println!("slice: {:?}", device_slice);
         device_slice.set(12345).unwrap();
 
-        let vec = reg_buffer.unregister().unwrap();
+        let vec = reg_buffer.unlock().unwrap();
 
         for (idx, i) in vec.iter().enumerate() {
             if idx >= 100 && idx < 500 {
