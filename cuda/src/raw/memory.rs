@@ -63,7 +63,7 @@ impl DeviceManaged for DevicePtr {}
 
 impl std::fmt::Debug for DevicePtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DevicePtr").field("ptr", &self.0).finish()
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
     }
 }
 

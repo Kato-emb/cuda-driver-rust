@@ -12,6 +12,12 @@ use super::{CudaPointer, DeviceAccessible, DeviceManaged};
 
 wrap_sys_handle!(PooledDevicePtr, sys::CUdeviceptr);
 
+impl std::fmt::Debug for PooledDevicePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
+    }
+}
+
 unsafe impl CudaPointer for PooledDevicePtr {
     unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
         PooledDevicePtr(ptr as sys::CUdeviceptr)

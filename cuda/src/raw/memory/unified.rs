@@ -10,6 +10,12 @@ use super::{CudaPointer, DeviceAccessible, DeviceManaged, HostAccessible, Locati
 
 wrap_sys_handle!(UnifiedDevicePtr, sys::CUdeviceptr);
 
+impl std::fmt::Debug for UnifiedDevicePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
+    }
+}
+
 unsafe impl CudaPointer for UnifiedDevicePtr {
     unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
         UnifiedDevicePtr(ptr as sys::CUdeviceptr)

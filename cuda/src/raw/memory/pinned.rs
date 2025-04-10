@@ -11,9 +11,7 @@ wrap_sys_handle!(PinnedHostPtr, *mut std::ffi::c_void);
 
 impl std::fmt::Debug for PinnedHostPtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PinnedHostPtr")
-            .field("ptr", &self.0)
-            .finish()
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
     }
 }
 
@@ -42,6 +40,12 @@ impl HostAccessible for PinnedHostPtr {
 impl HostManaged for PinnedHostPtr {}
 
 wrap_sys_handle!(PinnedDevicePtr, sys::CUdeviceptr);
+
+impl std::fmt::Debug for PinnedDevicePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
+    }
+}
 
 unsafe impl CudaPointer for PinnedDevicePtr {
     unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {

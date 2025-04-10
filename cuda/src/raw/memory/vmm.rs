@@ -15,6 +15,12 @@ use super::{
 
 wrap_sys_handle!(VirtualDevicePtr, sys::CUdeviceptr);
 
+impl std::fmt::Debug for VirtualDevicePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
+    }
+}
+
 unsafe impl CudaPointer for VirtualDevicePtr {
     unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
         VirtualDevicePtr(ptr as sys::CUdeviceptr)
@@ -40,9 +46,7 @@ wrap_sys_handle!(DeviceHandle, sys::CUmemGenericAllocationHandle);
 
 impl std::fmt::Debug for DeviceHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DeviceHandle")
-            .field("handle", &self.0)
-            .finish()
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
     }
 }
 
