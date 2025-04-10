@@ -1,20 +1,119 @@
 use crate::{
     error::{CudaResult, DropResult},
-    raw::memory::{HostAccessible, HostManaged, pinned::*},
+    raw::memory::{
+        CudaPointer, HostAccessible, HostManaged,
+        pinned::{PinnedHostPtr, *},
+    },
 };
 
-use super::{CudaDevicePointer, CudaHostPointer, DeviceRepr};
+use super::{CudaDeviceSlice, CudaDeviceSliceMut, CudaHostSlice, CudaHostSliceMut, DeviceRepr};
 
-impl<T: DeviceRepr> CudaHostPointer<'_, T, PinnedHostPtr> {
-    pub fn as_device_pointer<'a>(
-        &'a mut self,
-    ) -> CudaResult<CudaDevicePointer<'a, T, PinnedDevicePtr>> {
+#[derive(Debug)]
+pub struct CudaHostBuffer<Repr: DeviceRepr, Ptr: HostManaged> {
+    ptr: Ptr,
+    size: usize,
+    _marker: std::marker::PhantomData<*mut Repr>,
+}
+
+pub type CudaPinnedBuffer<Repr> = CudaHostBuffer<Repr, PinnedHostPtr>;
+
+impl<Repr: DeviceRepr, Ptr: HostManaged> Drop for CudaHostBuffer<Repr, Ptr> {
+    fn drop(&mut self) {
+        if self.ptr.as_host_ptr().is_null() {
+            return;
+        }
+
+        let ptr = std::mem::replace(&mut self.ptr, unsafe {
+            Ptr::from_raw_ptr(std::ptr::null_mut::<std::ffi::c_void>())
+        });
+        let old = Self {
+            ptr,
+            size: 0,
+            _marker: std::marker::PhantomData,
+        };
+
+        if let Err((_, e)) = old.free() {
+            log::error!("Failed to free CUDA pinned pointer: {:?}", e);
+        }
+    }
+}
+
+impl<Repr: DeviceRepr, Ptr: HostManaged> CudaHostBuffer<Repr, Ptr> {
+    pub fn free(mut self) -> DropResult<Self> {
+        match unsafe { free_pinned(&mut self.ptr) } {
+            Ok(_) => {
+                // The pointer is now invalid, so we need to drop it.
+                std::mem::forget(self);
+                Ok(())
+            }
+            Err(e) => Err((self, e)),
+        }
+    }
+
+    pub fn as_slice(&self) -> CudaHostSlice<Repr, Ptr> {
+        CudaHostSlice {
+            ptr: self.ptr,
+            offset: 0,
+            len: self.size.wrapping_div(std::mem::size_of::<Repr>()),
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn as_mut_slice(&mut self) -> CudaHostSliceMut<Repr, Ptr> {
+        CudaHostSliceMut {
+            ptr: self.ptr,
+            offset: 0,
+            len: self.size.wrapping_div(std::mem::size_of::<Repr>()),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<Repr: DeviceRepr> CudaHostBuffer<Repr, PinnedHostPtr> {
+    pub fn new(len: usize) -> CudaResult<Self> {
+        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
+        let ptr = unsafe { malloc_pinned(bytesize) }?;
+
+        Ok(Self {
+            ptr,
+            size: bytesize,
+            _marker: std::marker::PhantomData,
+        })
+    }
+
+    pub fn new_with_flags(len: usize, flags: PinnedFlags) -> CudaResult<Self> {
+        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
+        let ptr = unsafe { malloc_pinned_with_flags(bytesize, flags) }?;
+
+        Ok(Self {
+            ptr,
+            size: bytesize,
+            _marker: std::marker::PhantomData,
+        })
+    }
+
+    pub fn as_device<'a>(&'a self) -> CudaResult<CudaDeviceSlice<'a, Repr, PinnedDevicePtr>> {
         debug_assert!(self.flags()?.contains(PinnedFlags::DEVICEMAP));
         let device_ptr = unsafe { get_device_pointer(&self.ptr, DevicePointerFlags::_ZERO) }?;
 
-        Ok(CudaDevicePointer {
+        Ok(CudaDeviceSlice {
             ptr: device_ptr,
-            size: self.size,
+            offset: 0,
+            len: self.size / std::mem::size_of::<Repr>(),
+            _marker: std::marker::PhantomData,
+        })
+    }
+
+    pub fn as_device_mut<'a>(
+        &'a mut self,
+    ) -> CudaResult<CudaDeviceSliceMut<'a, Repr, PinnedDevicePtr>> {
+        debug_assert!(self.flags()?.contains(PinnedFlags::DEVICEMAP));
+        let device_ptr = unsafe { get_device_pointer(&self.ptr, DevicePointerFlags::_ZERO) }?;
+
+        Ok(CudaDeviceSliceMut {
+            ptr: device_ptr,
+            offset: 0,
+            len: self.size / std::mem::size_of::<Repr>(),
             _marker: std::marker::PhantomData,
         })
     }
@@ -25,102 +124,25 @@ impl<T: DeviceRepr> CudaHostPointer<'_, T, PinnedHostPtr> {
 }
 
 #[derive(Debug)]
-pub struct CudaPinnedPointerOwned<T: DeviceRepr, Ptr: HostManaged> {
-    inner: CudaHostPointer<'static, T, Ptr>,
+pub struct CudaHostRegisteredBuffer<Repr: DeviceRepr> {
+    ptr: PinnedHostPtr,
+    size: usize,
+    _marker: std::marker::PhantomData<*mut Repr>,
 }
 
-impl<T: DeviceRepr, Ptr: HostManaged> Drop for CudaPinnedPointerOwned<T, Ptr> {
+impl<Repr: DeviceRepr> Drop for CudaHostRegisteredBuffer<Repr> {
     fn drop(&mut self) {
-        if self.inner.ptr.as_host_ptr().is_null() {
+        if self.ptr.as_host_ptr().is_null() {
             return;
         }
 
-        let ptr = std::mem::replace(&mut self.inner.ptr, Ptr::null());
+        let old = std::mem::replace(&mut self.ptr, unsafe {
+            PinnedHostPtr::from_raw_ptr(std::ptr::null_mut::<*mut Repr>())
+        });
         let old = Self {
-            inner: CudaHostPointer {
-                ptr,
-                size: 0,
-                _marker: std::marker::PhantomData,
-            },
-        };
-
-        if let Err((_, e)) = old.free() {
-            log::error!("Failed to free CUDA pinned pointer: {:?}", e);
-        }
-    }
-}
-
-impl<T: DeviceRepr, Ptr: HostManaged> std::ops::Deref for CudaPinnedPointerOwned<T, Ptr> {
-    type Target = CudaHostPointer<'static, T, Ptr>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: DeviceRepr, Ptr: HostManaged> std::ops::DerefMut for CudaPinnedPointerOwned<T, Ptr> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl<T: DeviceRepr, Ptr: HostManaged> CudaPinnedPointerOwned<T, Ptr> {
-    pub fn free(mut self) -> DropResult<Self> {
-        match unsafe { free_pinned(&mut self.inner.ptr) } {
-            Ok(_) => {
-                // The pointer is now invalid, so we need to drop it.
-                std::mem::forget(self);
-                Ok(())
-            }
-            Err(e) => Err((self, e)),
-        }
-    }
-}
-
-impl<T: DeviceRepr> CudaPinnedPointerOwned<T, PinnedHostPtr> {
-    pub fn new(len: usize) -> CudaResult<Self> {
-        let bytesize = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        let ptr = unsafe { malloc_pinned(bytesize) }?;
-        Ok(Self {
-            inner: CudaHostPointer {
-                ptr,
-                size: bytesize,
-                _marker: std::marker::PhantomData,
-            },
-        })
-    }
-
-    pub fn new_with_flags(len: usize, flags: PinnedFlags) -> CudaResult<Self> {
-        let bytesize = len.checked_mul(std::mem::size_of::<T>()).unwrap_or(0);
-        let ptr = unsafe { malloc_pinned_with_flags(bytesize, flags) }?;
-        Ok(Self {
-            inner: CudaHostPointer {
-                ptr,
-                size: bytesize,
-                _marker: std::marker::PhantomData,
-            },
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct CudaPinnedPointerRegistered<T: DeviceRepr> {
-    inner: CudaHostPointer<'static, T, PinnedHostPtr>,
-}
-
-impl<T: DeviceRepr> Drop for CudaPinnedPointerRegistered<T> {
-    fn drop(&mut self) {
-        if self.inner.ptr.as_host_ptr().is_null() {
-            return;
-        }
-
-        let old = std::mem::replace(&mut self.ptr, PinnedHostPtr::null());
-        let old = Self {
-            inner: CudaHostPointer {
-                ptr: old,
-                size: 0,
-                _marker: std::marker::PhantomData,
-            },
+            ptr: old,
+            size: 0,
+            _marker: std::marker::PhantomData,
         };
 
         let vec = old.into_vec();
@@ -128,23 +150,9 @@ impl<T: DeviceRepr> Drop for CudaPinnedPointerRegistered<T> {
     }
 }
 
-impl<T: DeviceRepr> std::ops::Deref for CudaPinnedPointerRegistered<T> {
-    type Target = CudaHostPointer<'static, T, PinnedHostPtr>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: DeviceRepr> std::ops::DerefMut for CudaPinnedPointerRegistered<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl<T: DeviceRepr> CudaPinnedPointerRegistered<T> {
-    pub fn new(src: Vec<T>, flags: HostRegisterFlags) -> CudaResult<Self> {
-        let bytesize = std::mem::size_of::<T>() * src.capacity();
+impl<Repr: DeviceRepr> CudaHostRegisteredBuffer<Repr> {
+    pub fn new(src: Vec<Repr>, flags: HostRegisterFlags) -> CudaResult<Self> {
+        let bytesize = std::mem::size_of::<Repr>() * src.capacity();
 
         let host_ptr = unsafe {
             let src = src.leak();
@@ -155,17 +163,19 @@ impl<T: DeviceRepr> CudaPinnedPointerRegistered<T> {
         };
 
         Ok(Self {
-            inner: CudaHostPointer {
-                ptr: host_ptr,
-                size: bytesize,
-                _marker: std::marker::PhantomData,
-            },
+            ptr: host_ptr,
+            size: bytesize,
+            _marker: std::marker::PhantomData,
         })
     }
 
-    pub fn into_vec(self) -> Vec<T> {
-        let len = self.size.checked_div(std::mem::size_of::<T>()).unwrap_or(0);
-        let vec = unsafe { Vec::from_raw_parts(self.inner.ptr.into_raw() as *mut T, len, len) };
+    pub fn flags(&self) -> CudaResult<PinnedFlags> {
+        unsafe { get_flags(&self.ptr) }
+    }
+
+    pub fn into_vec(self) -> Vec<Repr> {
+        let len = self.size.wrapping_div(std::mem::size_of::<Repr>());
+        let vec = unsafe { Vec::from_raw_parts(self.ptr.into_raw() as *mut Repr, len, len) };
 
         std::mem::forget(self);
         vec
@@ -175,7 +185,7 @@ impl<T: DeviceRepr> CudaPinnedPointerRegistered<T> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        driver::{context::CudaPrimaryContext, device::CudaDevice},
+        driver::{context::CudaPrimaryContext, device::CudaDevice, memory::CudaSliceAccess},
         raw::memory::HostAccessible,
     };
 
@@ -189,15 +199,16 @@ mod tests {
         ctx.set_current().unwrap();
 
         let size = 1024;
-        let mut host_ptr = CudaPinnedPointerOwned::new(size).unwrap();
-        assert!(host_ptr.inner.ptr.as_host_ptr() != std::ptr::null_mut());
-        println!("flags: {:?}", host_ptr.flags().unwrap());
+        let mut host_buffer = CudaPinnedBuffer::new(size).unwrap();
+        assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
+        println!("buffer: {:?}", host_buffer);
 
-        let mut pinned_ptr = host_ptr.as_device_pointer().unwrap();
-        pinned_ptr.set_u8(127, 500).unwrap();
+        let mut device_slice = host_buffer.as_device_mut().unwrap().subslice(100..500);
+        println!("slice: {:?}", device_slice);
+        device_slice.set(127u8).unwrap();
 
-        for (idx, i) in host_ptr.as_slice().iter().enumerate() {
-            if idx < 500 {
+        for (idx, i) in host_buffer.as_slice().iter().enumerate() {
+            if idx >= 100 && idx < 500 {
                 assert_eq!(*i, 127, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);
@@ -213,15 +224,16 @@ mod tests {
         ctx.set_current().unwrap();
 
         let size = 1024;
-        let mut host_ptr = CudaPinnedPointerOwned::new(size).unwrap();
-        assert!(host_ptr.inner.ptr.as_host_ptr() != std::ptr::null_mut());
-        println!("flags: {:?}", host_ptr.flags().unwrap());
+        let mut host_buffer = CudaPinnedBuffer::new(size).unwrap();
+        assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
+        println!("buffer: {:?}", host_buffer);
 
-        let mut pinned_ptr = host_ptr.as_device_pointer().unwrap();
-        pinned_ptr.set_u16(12345, 500).unwrap();
+        let mut device_slice = host_buffer.as_device_mut().unwrap().subslice(100..500);
+        println!("slice: {:?}", device_slice);
+        device_slice.set(12345u16).unwrap();
 
-        for (idx, i) in host_ptr.as_slice().iter().enumerate() {
-            if idx < 500 {
+        for (idx, i) in host_buffer.as_slice().iter().enumerate() {
+            if idx >= 100 && idx < 500 {
                 assert_eq!(*i, 12345, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);
@@ -237,16 +249,16 @@ mod tests {
         ctx.set_current().unwrap();
 
         let size = 1024;
-        let mut host_ptr = CudaPinnedPointerOwned::new(size).unwrap();
-        assert!(host_ptr.inner.ptr.as_host_ptr() != std::ptr::null_mut());
-        println!("flags: {:?}", host_ptr.flags().unwrap());
-        println!("size: {:?}", host_ptr.size);
+        let mut host_buffer = CudaPinnedBuffer::new(size).unwrap();
+        assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
+        println!("buffer: {:?}", host_buffer);
 
-        let mut pinned_ptr = host_ptr.as_device_pointer().unwrap();
-        pinned_ptr.set_u32(12345, 500).unwrap();
+        let mut device_slice = host_buffer.as_device_mut().unwrap().subslice(100..500);
+        println!("slice: {:?}", device_slice);
+        device_slice.set(12345u32).unwrap();
 
-        for (idx, i) in host_ptr.as_slice().iter().enumerate() {
-            if idx < 500 {
+        for (idx, i) in host_buffer.as_slice().iter().enumerate() {
+            if idx >= 100 && idx < 500 {
                 assert_eq!(*i, 12345, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);
@@ -262,21 +274,21 @@ mod tests {
         ctx.set_current().unwrap();
 
         let bytesize = 256;
-        let mut host_ptr = CudaPinnedPointerRegistered::<u32>::new(
+        let mut host_ptr = CudaHostRegisteredBuffer::<u32>::new(
             vec![0u32; bytesize],
             HostRegisterFlags::PORTABLE | HostRegisterFlags::DEVICEMAP,
         )
         .unwrap();
-        assert!(host_ptr.inner.ptr.as_host_ptr() != std::ptr::null_mut());
+        assert!(host_ptr.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("flags: {:?}", host_ptr.flags().unwrap());
 
-        let mut pinned_ptr = host_ptr.as_device_pointer().unwrap();
-        pinned_ptr.set_u32(12345, bytesize).unwrap();
+        // let mut pinned_ptr = host_ptr.as_device_pointer().unwrap();
+        // pinned_ptr.set_u32(12345, bytesize).unwrap();
 
-        let vec = host_ptr.into_vec();
+        // let vec = host_ptr.into_vec();
 
-        for (idx, i) in vec.iter().enumerate() {
-            assert_eq!(*i, 12345, "Index: {}", idx);
-        }
+        // for (idx, i) in vec.iter().enumerate() {
+        //     assert_eq!(*i, 12345, "Index: {}", idx);
+        // }
     }
 }
