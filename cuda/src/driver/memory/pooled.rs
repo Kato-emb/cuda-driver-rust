@@ -1,10 +1,13 @@
 use crate::{
+    driver::stream::CudaStream,
     error::CudaResult,
     raw::{
-        memory::{AllocationHandleType, AllocationType, LocationType},
+        memory::{AllocationHandleType, AllocationType, LocationType, pooled::*},
         pool::*,
     },
 };
+
+use super::{CudaDeviceBuffer, DeviceRepr};
 
 #[derive(Debug)]
 pub struct CudaMemoryPool {
@@ -54,6 +57,47 @@ impl CudaMemoryPool {
 
     pub fn trim_to(&self, keep: usize) -> CudaResult<()> {
         unsafe { trim_to(self.inner, keep) }
+    }
+}
+
+pub type CudaDevicePooledBuffer<Repr> = CudaDeviceBuffer<Repr, PooledDevicePtr>;
+
+impl<Repr: DeviceRepr> CudaDevicePooledBuffer<Repr> {
+    pub fn alloc_pooled_async(
+        len: usize,
+        pool: &CudaMemoryPool,
+        stream: &CudaStream,
+    ) -> CudaResult<Self> {
+        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
+        let ptr = unsafe { malloc_pooled_async(bytesize, pool.inner, stream.inner) }?;
+
+        Ok(Self {
+            ptr,
+            size: bytesize,
+            _marker: std::marker::PhantomData,
+        })
+    }
+
+    pub fn export(&self) -> CudaResult<(PooledPtrExportData, usize)> {
+        let data = unsafe { export(self.ptr) }?;
+        let len = self.size.wrapping_div(std::mem::size_of::<Repr>());
+
+        Ok((data, len))
+    }
+
+    pub fn import(
+        data: PooledPtrExportData,
+        len: usize,
+        pool: &CudaMemoryPool,
+    ) -> CudaResult<Self> {
+        let ptr = unsafe { import(pool.inner, &data) }?;
+        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
+
+        Ok(Self {
+            ptr,
+            size: bytesize,
+            _marker: std::marker::PhantomData,
+        })
     }
 }
 

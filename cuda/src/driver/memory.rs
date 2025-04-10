@@ -5,7 +5,8 @@ use crate::raw::memory::*;
 use super::stream::CudaStream;
 
 pub mod pinned;
-// pub mod unified;
+pub mod pooled;
+pub mod unified;
 
 pub unsafe trait DeviceRepr: Copy + 'static {}
 unsafe impl DeviceRepr for bool {}
@@ -447,7 +448,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceBuffer<Repr, Ptr> {
 
 impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
     pub fn alloc(len: usize) -> CudaResult<Self> {
-        let bytesize = len.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
+        let bytesize = len.wrapping_div(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc(bytesize) }?;
 
         Ok(Self {
@@ -458,7 +459,7 @@ impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
     }
 
     pub fn alloc_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
-        let bytesize = len.checked_mul(std::mem::size_of::<Repr>()).unwrap_or(0);
+        let bytesize = len.wrapping_div(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc_async(bytesize, stream.inner) }?;
 
         Ok(Self {
