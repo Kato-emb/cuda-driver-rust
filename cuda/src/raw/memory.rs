@@ -31,9 +31,7 @@ pub trait HostAccessible: CudaPointer + Copy {
 /// A trait for device pointers that are managed by CUDA.
 ///
 /// Deallocated by CUDA, call [free()] or [free_async()] to deallocate.
-pub trait DeviceManaged: DeviceAccessible {}
-
-pub trait HostManaged: HostAccessible {}
+pub trait DeviceAllocated: DeviceAccessible {}
 
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
 
@@ -59,7 +57,7 @@ impl DeviceAccessible for DevicePtr {
     }
 }
 
-impl DeviceManaged for DevicePtr {}
+impl DeviceAllocated for DevicePtr {}
 
 impl std::fmt::Debug for DevicePtr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -153,14 +151,14 @@ pub unsafe fn malloc_pitch(
 
 pub unsafe fn free<P>(ptr: &mut P) -> CudaResult<()>
 where
-    P: DeviceManaged,
+    P: DeviceAllocated,
 {
     unsafe { sys::cuMemFree_v2(ptr.as_device_ptr()) }.to_result()
 }
 
 pub unsafe fn free_async<P>(ptr: &mut P, stream: &Stream) -> CudaResult<()>
 where
-    P: DeviceManaged,
+    P: DeviceAllocated,
 {
     unsafe { sys::cuMemFreeAsync(ptr.as_device_ptr(), stream.0) }.to_result()
 }

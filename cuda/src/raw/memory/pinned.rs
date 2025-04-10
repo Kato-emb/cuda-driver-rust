@@ -5,7 +5,9 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::{CudaPointer, DeviceAccessible, HostAccessible, HostManaged};
+use super::{CudaPointer, DeviceAccessible, HostAccessible};
+
+pub trait DevicePinned: HostAccessible {}
 
 wrap_sys_handle!(PinnedHostPtr, *mut std::ffi::c_void);
 
@@ -37,7 +39,7 @@ impl HostAccessible for PinnedHostPtr {
     }
 }
 
-impl HostManaged for PinnedHostPtr {}
+impl DevicePinned for PinnedHostPtr {}
 
 wrap_sys_handle!(PinnedDevicePtr, sys::CUdeviceptr);
 
@@ -68,6 +70,38 @@ impl DeviceAccessible for PinnedDevicePtr {
         self.0
     }
 }
+
+wrap_sys_handle!(RegisteredHostPtr, *mut std::ffi::c_void);
+
+impl std::fmt::Debug for RegisteredHostPtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
+    }
+}
+
+unsafe impl CudaPointer for RegisteredHostPtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        RegisteredHostPtr(ptr as *mut std::ffi::c_void)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_host_ptr() as *mut u8;
+        let new_ptr = ptr.wrapping_offset(byte_count) as *mut std::ffi::c_void;
+        RegisteredHostPtr(new_ptr)
+    }
+}
+
+impl HostAccessible for RegisteredHostPtr {
+    #[inline(always)]
+    fn as_host_ptr(&self) -> *mut std::ffi::c_void {
+        self.0
+    }
+}
+
+impl DevicePinned for RegisteredHostPtr {}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,39 +145,45 @@ pub unsafe fn malloc_pinned_with_flags(
     Ok(PinnedHostPtr(ptr))
 }
 
-pub unsafe fn free_pinned<P>(ptr: &mut P) -> CudaResult<()>
-where
-    P: HostManaged,
-{
+pub unsafe fn free_pinned(ptr: &mut PinnedHostPtr) -> CudaResult<()> {
     unsafe { sys::cuMemFreeHost(ptr.as_host_ptr()) }.to_result()
 }
 
-pub unsafe fn get_device_pointer(
-    host_ptr: &PinnedHostPtr,
+pub unsafe fn get_device_pointer<P>(
+    host_ptr: &P,
     flags: DevicePointerFlags,
-) -> CudaResult<PinnedDevicePtr> {
+) -> CudaResult<PinnedDevicePtr>
+where
+    P: DevicePinned,
+{
     let mut device_ptr = 0;
-    unsafe { sys::cuMemHostGetDevicePointer_v2(&mut device_ptr, host_ptr.0, flags.bits()) }
-        .to_result()?;
+    unsafe {
+        sys::cuMemHostGetDevicePointer_v2(&mut device_ptr, host_ptr.as_host_ptr(), flags.bits())
+    }
+    .to_result()?;
 
     Ok(PinnedDevicePtr(device_ptr))
 }
 
-pub unsafe fn get_flags(host_ptr: &PinnedHostPtr) -> CudaResult<PinnedFlags> {
+pub unsafe fn get_flags<P>(host_ptr: &P) -> CudaResult<PinnedFlags>
+where
+    P: DevicePinned,
+{
     let mut flags = 0;
-    unsafe { sys::cuMemHostGetFlags(&mut flags, host_ptr.0) }.to_result()?;
+    unsafe { sys::cuMemHostGetFlags(&mut flags, host_ptr.as_host_ptr()) }.to_result()?;
 
     Ok(PinnedFlags::from_bits(flags).unwrap_or(PinnedFlags::empty()))
 }
 
 pub unsafe fn register(
-    host_ptr: &PinnedHostPtr,
+    host_ptr: *mut std::ffi::c_void,
     bytesize: usize,
     flags: HostRegisterFlags,
-) -> CudaResult<()> {
-    unsafe { sys::cuMemHostRegister_v2(host_ptr.0, bytesize, flags.bits()) }.to_result()
+) -> CudaResult<RegisteredHostPtr> {
+    unsafe { sys::cuMemHostRegister_v2(host_ptr, bytesize, flags.bits()) }.to_result()?;
+    Ok(RegisteredHostPtr(host_ptr))
 }
 
-pub unsafe fn unregister(host_ptr: &PinnedHostPtr) -> CudaResult<()> {
+pub unsafe fn unregister(host_ptr: &RegisteredHostPtr) -> CudaResult<()> {
     unsafe { sys::cuMemHostUnregister(host_ptr.0) }.to_result()
 }

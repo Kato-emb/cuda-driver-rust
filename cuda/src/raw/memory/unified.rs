@@ -6,7 +6,7 @@ use crate::{
     wrap_sys_enum, wrap_sys_handle,
 };
 
-use super::{CudaPointer, DeviceAccessible, DeviceManaged, HostAccessible, Location};
+use super::{CudaPointer, DeviceAccessible, DeviceAllocated, HostAccessible, Location};
 
 wrap_sys_handle!(UnifiedDevicePtr, sys::CUdeviceptr);
 
@@ -45,7 +45,7 @@ impl HostAccessible for UnifiedDevicePtr {
     }
 }
 
-impl DeviceManaged for UnifiedDevicePtr {}
+impl DeviceAllocated for UnifiedDevicePtr {}
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

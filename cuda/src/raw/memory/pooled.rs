@@ -8,7 +8,7 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::{CudaPointer, DeviceAccessible, DeviceManaged};
+use super::{CudaPointer, DeviceAccessible, DeviceAllocated};
 
 wrap_sys_handle!(PooledDevicePtr, sys::CUdeviceptr);
 
@@ -40,7 +40,7 @@ impl DeviceAccessible for PooledDevicePtr {
     }
 }
 
-impl DeviceManaged for PooledDevicePtr {}
+impl DeviceAllocated for PooledDevicePtr {}
 
 wrap_sys_handle!(PooledPtrExportData, sys::CUmemPoolPtrExportData);
 
