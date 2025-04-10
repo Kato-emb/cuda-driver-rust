@@ -6,6 +6,7 @@ pub mod context;
 pub mod device;
 pub mod event;
 pub mod memory;
+pub mod pool;
 pub mod stream;
 
 pub static CUDA_INITIALIZED: std::sync::atomic::AtomicBool =

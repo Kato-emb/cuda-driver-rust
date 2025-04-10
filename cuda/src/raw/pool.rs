@@ -13,6 +13,13 @@ use super::{
 };
 
 wrap_sys_handle!(MemoryPool, sys::CUmemoryPool);
+
+impl std::fmt::Debug for MemoryPool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
+    }
+}
+
 wrap_sys_handle!(MemoryPoolProps, sys::CUmemPoolProps);
 
 wrap_sys_enum!(
@@ -41,7 +48,7 @@ pub unsafe fn destroy(pool: MemoryPool) -> CudaResult<()> {
     unsafe { sys::cuMemPoolDestroy(pool.0) }.to_result()
 }
 
-pub unsafe fn get_access(pool: MemoryPool, location: &Location) -> CudaResult<AccessFlags> {
+pub unsafe fn get_access(pool: &MemoryPool, location: &Location) -> CudaResult<AccessFlags> {
     let mut flags = unsafe { std::mem::zeroed() };
     unsafe {
         sys::cuMemPoolGetAccess(
@@ -55,12 +62,12 @@ pub unsafe fn get_access(pool: MemoryPool, location: &Location) -> CudaResult<Ac
     Ok(flags.into())
 }
 
-pub unsafe fn set_access(pool: MemoryPool, map: &[AccessDesc]) -> CudaResult<()> {
+pub unsafe fn set_access(pool: &MemoryPool, map: &[AccessDesc]) -> CudaResult<()> {
     let count = map.len();
     unsafe { sys::cuMemPoolSetAccess(pool.0, map.as_ptr() as *const _, count) }.to_result()
 }
 
-pub unsafe fn get_attribute<T>(pool: MemoryPool, attr: MemoryPoolAttribute) -> CudaResult<T> {
+pub unsafe fn get_attribute<T>(pool: &MemoryPool, attr: MemoryPoolAttribute) -> CudaResult<T> {
     let mut value = MaybeUninit::<T>::uninit();
     unsafe {
         sys::cuMemPoolGetAttribute(
@@ -75,7 +82,7 @@ pub unsafe fn get_attribute<T>(pool: MemoryPool, attr: MemoryPoolAttribute) -> C
 }
 
 pub unsafe fn set_attribute<T>(
-    pool: MemoryPool,
+    pool: &MemoryPool,
     attr: MemoryPoolAttribute,
     value: &T,
 ) -> CudaResult<()> {
@@ -94,7 +101,7 @@ pub unsafe fn trim_to(pool: MemoryPool, keep: usize) -> CudaResult<()> {
 }
 
 pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(
-    pool: MemoryPool,
+    pool: &MemoryPool,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
 ) -> CudaResult<Handle> {
@@ -113,7 +120,7 @@ pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(
 }
 
 pub unsafe fn import_from_shareable_handle<Handle: ShareableHandle>(
-    handle: &Handle,
+    handle: Handle,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
 ) -> CudaResult<MemoryPool> {
@@ -155,11 +162,11 @@ mod tests {
         let mut location = Location(unsafe { std::mem::zeroed() });
         location.0.type_ = sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE;
         location.0.id = device.0;
-        let access_flags = unsafe { get_access(pool, &mut location) }.unwrap();
+        let access_flags = unsafe { get_access(&pool, &mut location) }.unwrap();
         assert_eq!(access_flags, AccessFlags::ReadWrite);
 
         let attr =
-            unsafe { get_attribute::<u64>(pool, MemoryPoolAttribute::ReleaseThreshold) }.unwrap();
+            unsafe { get_attribute::<u64>(&pool, MemoryPoolAttribute::ReleaseThreshold) }.unwrap();
         assert_eq!(attr, 0);
 
         unsafe { destroy(pool) }.unwrap();
