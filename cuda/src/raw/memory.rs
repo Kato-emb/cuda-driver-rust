@@ -13,14 +13,19 @@ pub mod pooled;
 pub mod unified;
 pub mod vmm;
 
-pub trait DeviceAccessible: Copy {
-    fn as_device_ptr(&self) -> sys::CUdeviceptr;
-    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self;
+pub unsafe trait CudaPointer {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self;
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized;
 }
 
-pub trait HostAccessible: Copy {
+pub trait DeviceAccessible: CudaPointer + Copy {
+    fn as_device_ptr(&self) -> sys::CUdeviceptr;
+}
+
+pub trait HostAccessible: CudaPointer + Copy {
     fn as_host_ptr(&self) -> *mut std::ffi::c_void;
-    unsafe fn from_raw_ptr(ptr: *mut std::ffi::c_void) -> Self;
 }
 
 /// A trait for device pointers that are managed by CUDA.
@@ -32,14 +37,25 @@ pub trait HostManaged: HostAccessible {}
 
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
 
+unsafe impl CudaPointer for DevicePtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        DevicePtr(ptr as sys::CUdeviceptr)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_device_ptr() as i64;
+        let new_ptr = ptr.wrapping_add(byte_count as i64) as sys::CUdeviceptr;
+        DevicePtr(new_ptr)
+    }
+}
+
 impl DeviceAccessible for DevicePtr {
     #[inline(always)]
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
-    }
-
-    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
-        DevicePtr(ptr)
     }
 }
 

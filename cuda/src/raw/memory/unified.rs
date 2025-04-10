@@ -6,18 +6,36 @@ use crate::{
     wrap_sys_enum, wrap_sys_handle,
 };
 
-use super::{DeviceAccessible, DeviceManaged, Location};
+use super::{CudaPointer, DeviceAccessible, DeviceManaged, HostAccessible, Location};
 
 wrap_sys_handle!(UnifiedDevicePtr, sys::CUdeviceptr);
+
+unsafe impl CudaPointer for UnifiedDevicePtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        UnifiedDevicePtr(ptr as sys::CUdeviceptr)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_device_ptr() as i64;
+        let new_ptr = ptr.wrapping_add(byte_count as i64) as sys::CUdeviceptr;
+        UnifiedDevicePtr(new_ptr)
+    }
+}
 
 impl DeviceAccessible for UnifiedDevicePtr {
     #[inline(always)]
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
     }
+}
 
-    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
-        UnifiedDevicePtr(ptr)
+impl HostAccessible for UnifiedDevicePtr {
+    #[inline(always)]
+    fn as_host_ptr(&self) -> *mut std::ffi::c_void {
+        self.0 as *mut std::ffi::c_void
     }
 }
 

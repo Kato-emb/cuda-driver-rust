@@ -8,18 +8,29 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::{DeviceAccessible, DeviceManaged};
+use super::{CudaPointer, DeviceAccessible, DeviceManaged};
 
 wrap_sys_handle!(PooledDevicePtr, sys::CUdeviceptr);
+
+unsafe impl CudaPointer for PooledDevicePtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        PooledDevicePtr(ptr as sys::CUdeviceptr)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_device_ptr() as i64;
+        let new_ptr = ptr.wrapping_add(byte_count as i64) as sys::CUdeviceptr;
+        PooledDevicePtr(new_ptr)
+    }
+}
 
 impl DeviceAccessible for PooledDevicePtr {
     #[inline(always)]
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
-    }
-
-    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
-        PooledDevicePtr(ptr)
     }
 }
 

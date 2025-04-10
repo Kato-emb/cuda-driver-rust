@@ -5,7 +5,7 @@ use crate::{
     wrap_sys_handle,
 };
 
-use super::{DeviceAccessible, HostAccessible, HostManaged};
+use super::{CudaPointer, DeviceAccessible, HostAccessible, HostManaged};
 
 wrap_sys_handle!(PinnedHostPtr, *mut std::ffi::c_void);
 
@@ -17,14 +17,25 @@ impl std::fmt::Debug for PinnedHostPtr {
     }
 }
 
+unsafe impl CudaPointer for PinnedHostPtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        PinnedHostPtr(ptr as *mut std::ffi::c_void)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_host_ptr() as *mut u8;
+        let new_ptr = ptr.wrapping_offset(byte_count) as *mut std::ffi::c_void;
+        PinnedHostPtr(new_ptr)
+    }
+}
+
 impl HostAccessible for PinnedHostPtr {
     #[inline(always)]
     fn as_host_ptr(&self) -> *mut std::ffi::c_void {
         self.0
-    }
-
-    unsafe fn from_raw_ptr(ptr: *mut std::ffi::c_void) -> Self {
-        PinnedHostPtr(ptr)
     }
 }
 
@@ -32,14 +43,25 @@ impl HostManaged for PinnedHostPtr {}
 
 wrap_sys_handle!(PinnedDevicePtr, sys::CUdeviceptr);
 
+unsafe impl CudaPointer for PinnedDevicePtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        PinnedDevicePtr(ptr as sys::CUdeviceptr)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_device_ptr() as i64;
+        let new_ptr = ptr.wrapping_add(byte_count as i64) as sys::CUdeviceptr;
+        PinnedDevicePtr(new_ptr)
+    }
+}
+
 impl DeviceAccessible for PinnedDevicePtr {
     #[inline(always)]
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
-    }
-
-    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
-        PinnedDevicePtr(ptr)
     }
 }
 

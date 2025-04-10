@@ -9,19 +9,30 @@ use crate::{
 };
 
 use super::{
-    AccessDesc, AccessFlags, AllocationHandleType, DeviceAccessible, DevicePtr, Location,
-    ShareableHandleFlags,
+    AccessDesc, AccessFlags, AllocationHandleType, CudaPointer, DeviceAccessible, DevicePtr,
+    Location, ShareableHandleFlags,
 };
 
 wrap_sys_handle!(VirtualDevicePtr, sys::CUdeviceptr);
 
+unsafe impl CudaPointer for VirtualDevicePtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        VirtualDevicePtr(ptr as sys::CUdeviceptr)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_device_ptr() as i64;
+        let new_ptr = ptr.wrapping_add(byte_count as i64) as sys::CUdeviceptr;
+        VirtualDevicePtr(new_ptr)
+    }
+}
+
 impl DeviceAccessible for VirtualDevicePtr {
     fn as_device_ptr(&self) -> sys::CUdeviceptr {
         self.0
-    }
-
-    unsafe fn from_raw_ptr(ptr: sys::CUdeviceptr) -> Self {
-        VirtualDevicePtr(ptr)
     }
 }
 
