@@ -115,7 +115,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceAccess<Repr>
     fn subslice(self, range: std::ops::Range<usize>) -> Self {
         let offset = self.offset + (range.start as isize);
         let len = range.end - range.start;
-        debug_assert!(len <= self.len);
+        debug_assert!(len <= self.len, "{} > {}", len, self.len);
 
         CudaDeviceSliceMut {
             ptr: self.ptr,
@@ -428,7 +428,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceBuffer<Repr, Ptr> {
 
 impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
     pub fn alloc(len: usize) -> CudaResult<Self> {
-        let bytesize = len.wrapping_div(std::mem::size_of::<Repr>());
+        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc(bytesize) }?;
 
         Ok(Self {
@@ -439,7 +439,7 @@ impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
     }
 
     pub fn alloc_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
-        let bytesize = len.wrapping_div(std::mem::size_of::<Repr>());
+        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc_async(bytesize, stream.inner) }?;
 
         Ok(Self {
@@ -480,15 +480,15 @@ mod tests {
 
         let mut buffer = CudaDeviceBuffer::alloc(1024).unwrap();
         assert!(buffer.ptr.0 != 0, "Failed to allocate CUDA device buffer");
+        println!("Buffer: {:?}", buffer);
 
-        let slice = buffer.as_mut_slice();
-        let mut subslice = slice.subslice(100..512);
-        println!("Slice: {:?}", subslice);
+        let mut slice = buffer.as_mut_slice().subslice(100..512);
+        println!("Slice: {:?}", slice);
         println!(
             "offset: {}, size: {}",
-            subslice.byte_offset(),
-            subslice.byte_size()
+            slice.byte_offset(),
+            slice.byte_size()
         );
-        subslice.set(u32::MAX).unwrap();
+        slice.set(u32::MAX).unwrap();
     }
 }
