@@ -115,6 +115,10 @@ impl CudaPrimaryContext {
     pub fn set_flags(&self, flags: ContextFlags) -> CudaResult<()> {
         unsafe { primary::set_flags(self.device.inner, flags) }
     }
+
+    pub fn device(&self) -> &CudaDevice {
+        &self.device
+    }
 }
 
 pub struct CudaOwnedContext {
