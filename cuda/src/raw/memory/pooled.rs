@@ -97,7 +97,7 @@ pub unsafe fn set_attribute<T>(
     .to_result()
 }
 
-pub unsafe fn trim_to(pool: MemoryPool, keep: usize) -> CudaResult<()> {
+pub unsafe fn trim_to(pool: &mut MemoryPool, keep: usize) -> CudaResult<()> {
     unsafe { sys::cuMemPoolTrimTo(pool.0, keep) }.to_result()
 }
 
@@ -192,7 +192,7 @@ pub unsafe fn export(pooled_ptr: PooledDevicePtr) -> CudaResult<PooledPtrExportD
 }
 
 pub unsafe fn import(
-    pool: MemoryPool,
+    pool: &MemoryPool,
     share_data: &PooledPtrExportData,
 ) -> CudaResult<PooledDevicePtr> {
     let mut device_ptr = 0;
