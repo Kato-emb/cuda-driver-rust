@@ -40,34 +40,34 @@ impl CudaStream {
     }
 
     pub fn id(&self) -> CudaResult<u64> {
-        unsafe { get_id(self.inner) }
+        unsafe { get_id(&self.inner) }
     }
 
     pub fn device(&self) -> CudaResult<CudaDevice> {
-        let device = unsafe { get_device(self.inner) }?;
+        let device = unsafe { get_device(&self.inner) }?;
         Ok(CudaDevice { inner: device })
     }
 
     // pub fn context(&self) {}
 
     pub fn flags(&self) -> CudaResult<StreamFlags> {
-        unsafe { get_flags(self.inner) }
+        unsafe { get_flags(&self.inner) }
     }
 
     pub fn priority(&self) -> CudaResult<i32> {
-        unsafe { get_priority(self.inner) }
+        unsafe { get_priority(&self.inner) }
     }
 
     pub fn query(&self) -> CudaResult<bool> {
-        unsafe { query(self.inner) }
+        unsafe { query(&self.inner) }
     }
 
     pub fn synchronize(&self) -> CudaResult<()> {
-        unsafe { synchronize(self.inner) }
+        unsafe { synchronize(&self.inner) }
     }
 
     pub fn wait_event(&self, event: &CudaEvent, flags: EventWaitFlags) -> CudaResult<()> {
-        unsafe { wait_event(self.inner, event.inner, flags) }
+        unsafe { wait_event(&self.inner, &event.inner, flags) }
     }
 }
 
