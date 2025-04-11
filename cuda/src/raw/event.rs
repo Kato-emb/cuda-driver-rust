@@ -13,7 +13,7 @@ wrap_sys_handle!(Event, sys::CUevent);
 
 impl std::fmt::Debug for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Event").field("handle", &self.0).finish()
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
     }
 }
 
@@ -54,14 +54,14 @@ pub unsafe fn destroy(event: Event) -> CudaResult<()> {
     unsafe { sys::cuEventDestroy_v2(event.0) }.to_result()
 }
 
-pub unsafe fn elapsed_time(start: Event, end: Event) -> CudaResult<f32> {
+pub unsafe fn elapsed_time(start: &Event, end: &Event) -> CudaResult<f32> {
     let mut time = 0.0;
     unsafe { sys::cuEventElapsedTime_v2(&mut time, start.0, end.0) }.to_result()?;
 
     Ok(time)
 }
 
-pub unsafe fn query(event: Event) -> CudaResult<bool> {
+pub unsafe fn query(event: &Event) -> CudaResult<bool> {
     let ret = unsafe { sys::cuEventQuery(event.0) }.to_result();
 
     match ret {
@@ -71,19 +71,19 @@ pub unsafe fn query(event: Event) -> CudaResult<bool> {
     }
 }
 
-pub unsafe fn record(event: Event, stream: Stream) -> CudaResult<()> {
+pub unsafe fn record(event: &Event, stream: &Stream) -> CudaResult<()> {
     unsafe { sys::cuEventRecord(event.0, stream.0) }.to_result()
 }
 
 pub unsafe fn record_with_flags(
-    event: Event,
-    stream: Stream,
+    event: &Event,
+    stream: &Stream,
     flags: EventRecordFlags,
 ) -> CudaResult<()> {
     unsafe { sys::cuEventRecordWithFlags(event.0, stream.0, flags.bits()) }.to_result()
 }
 
-pub unsafe fn synchronize(event: Event) -> CudaResult<()> {
+pub unsafe fn synchronize(event: &Event) -> CudaResult<()> {
     unsafe { sys::cuEventSynchronize(event.0) }.to_result()
 }
 
@@ -103,7 +103,7 @@ mod tests {
         assert!(result.is_ok(), "CUDA event creation failed: {:?}", result);
 
         let event = result.unwrap();
-        let result = unsafe { query(event) }.unwrap();
+        let result = unsafe { query(&event) }.unwrap();
         assert!(result, "CUDA event query return false");
 
         let result = unsafe { destroy(event) };

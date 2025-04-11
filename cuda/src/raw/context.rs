@@ -17,7 +17,7 @@ wrap_sys_handle!(Context, sys::CUcontext);
 
 impl std::fmt::Debug for Context {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Context").field("handle", &self.0).finish()
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
     }
 }
 

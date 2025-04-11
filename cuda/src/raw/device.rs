@@ -11,7 +11,7 @@ wrap_sys_handle!(Device, sys::CUdevice);
 
 impl std::fmt::Debug for Device {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Device").field("handle", &self.0).finish()
+        std::fmt::Pointer::fmt(&(self.0 as *mut std::ffi::c_void), f)
     }
 }
 
@@ -19,7 +19,7 @@ wrap_sys_handle!(Uuid, sys::CUuuid);
 
 impl std::fmt::Debug for Uuid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Uuid").field("uuid", &self.0).finish()
+        write!(f, "{:x?}", self.0.bytes)
     }
 }
 
