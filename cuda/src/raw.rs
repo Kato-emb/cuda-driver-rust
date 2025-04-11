@@ -5,7 +5,6 @@ pub mod event;
 pub mod init;
 pub mod ipc;
 pub mod memory;
-pub mod pool;
 pub mod stream;
 pub mod version;
 
