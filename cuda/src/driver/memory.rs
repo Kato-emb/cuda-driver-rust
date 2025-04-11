@@ -32,6 +32,10 @@ pub trait CudaSliceAccess<Repr: DeviceRepr> {
     fn len(&self) -> usize;
     fn as_raw_ptr(&self) -> Self::Ptr;
 
+    fn as_ptr(&self) -> Self::Ptr {
+        unsafe { self.as_raw_ptr().offset(self.byte_offset()) }
+    }
+
     fn byte_offset(&self) -> isize {
         self.offset()
             .wrapping_mul(std::mem::size_of::<Repr>() as isize)
@@ -74,7 +78,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceAccess<Repr>
     }
 
     fn as_raw_ptr(&self) -> Self::Ptr {
-        unsafe { self.ptr.offset(self.byte_offset()) }
+        self.ptr
     }
 
     fn subslice(self, range: std::ops::Range<usize>) -> Self {
@@ -105,7 +109,7 @@ impl<Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceAccess<Repr>
     }
 
     fn as_raw_ptr(&self) -> Self::Ptr {
-        unsafe { self.ptr.offset(self.byte_offset()) }
+        self.ptr
     }
 
     fn subslice(self, range: std::ops::Range<usize>) -> Self {
@@ -133,7 +137,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         debug_assert!(src.len() <= self.len());
 
         let byte_count = src.byte_size();
-        unsafe { copy_dtod(&mut self.as_raw_ptr(), &src.as_raw_ptr(), byte_count) }
+        unsafe { copy_dtod(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
     }
 
     pub fn copy_from_device_async<Src>(
@@ -147,14 +151,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         debug_assert!(src.len() <= self.len());
 
         let byte_count = src.byte_size();
-        unsafe {
-            copy_dtod_async(
-                &mut self.as_raw_ptr(),
-                &src.as_raw_ptr(),
-                byte_count,
-                &stream.inner,
-            )
-        }
+        unsafe { copy_dtod_async(&mut self.as_ptr(), &src.as_ptr(), byte_count, &stream.inner) }
     }
 
     pub fn copy_from_host<Src>(
@@ -167,7 +164,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         debug_assert!(src.len() <= self.len());
 
         let byte_count = src.byte_size();
-        unsafe { copy_htod(&mut self.as_raw_ptr(), &src.as_raw_ptr(), byte_count) }
+        unsafe { copy_htod(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
     }
 
     pub fn copy_from_host_async<Src>(
@@ -181,14 +178,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         debug_assert!(src.len() <= self.len());
 
         let byte_count = src.byte_size();
-        unsafe {
-            copy_htod_async(
-                &mut self.as_raw_ptr(),
-                &src.as_raw_ptr(),
-                byte_count,
-                &stream.inner,
-            )
-        }
+        unsafe { copy_htod_async(&mut self.as_ptr(), &src.as_ptr(), byte_count, &stream.inner) }
     }
 
     pub fn set(&mut self, value: Repr) -> CudaResult<()> {
@@ -198,15 +188,15 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         match size {
             1 => unsafe {
                 let bits = std::mem::transmute_copy::<Repr, u8>(&value);
-                set_d8(&mut self.as_raw_ptr(), bits, num_elements)
+                set_d8(&mut self.as_ptr(), bits, num_elements)
             },
             2 => unsafe {
                 let bits = std::mem::transmute_copy::<Repr, u16>(&value);
-                set_d16(&mut self.as_raw_ptr(), bits, num_elements)
+                set_d16(&mut self.as_ptr(), bits, num_elements)
             },
             4 => unsafe {
                 let bits = std::mem::transmute_copy::<Repr, u32>(&value);
-                set_d32(&mut self.as_raw_ptr(), bits, num_elements)
+                set_d32(&mut self.as_ptr(), bits, num_elements)
             },
             _ => panic!("Unsupported size: {}", size),
         }
@@ -219,15 +209,15 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         match size {
             1 => unsafe {
                 let bits = std::mem::transmute_copy::<Repr, u8>(&value);
-                set_d8_async(&mut self.as_raw_ptr(), bits, num_elements, &stream.inner)
+                set_d8_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
             },
             2 => unsafe {
                 let bits = std::mem::transmute_copy::<Repr, u16>(&value);
-                set_d16_async(&mut self.as_raw_ptr(), bits, num_elements, &stream.inner)
+                set_d16_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
             },
             4 => unsafe {
                 let bits = std::mem::transmute_copy::<Repr, u32>(&value);
-                set_d32_async(&mut self.as_raw_ptr(), bits, num_elements, &stream.inner)
+                set_d32_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
             },
             _ => panic!("Unsupported size: {}", size),
         }
@@ -255,7 +245,7 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::Deref for CudaHostSlice<'_
 
     fn deref(&self) -> &Self::Target {
         unsafe {
-            std::slice::from_raw_parts(self.as_raw_ptr().as_host_ptr() as *const Repr, self.len())
+            std::slice::from_raw_parts(self.as_ptr().as_host_ptr() as *const Repr, self.len())
         }
     }
 }
@@ -265,7 +255,7 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::Deref for CudaHostSliceMut
 
     fn deref(&self) -> &Self::Target {
         unsafe {
-            std::slice::from_raw_parts(self.as_raw_ptr().as_host_ptr() as *const Repr, self.len())
+            std::slice::from_raw_parts(self.as_ptr().as_host_ptr() as *const Repr, self.len())
         }
     }
 }
@@ -273,10 +263,7 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::Deref for CudaHostSliceMut
 impl<Repr: DeviceRepr, Ptr: HostAccessible> std::ops::DerefMut for CudaHostSliceMut<'_, Repr, Ptr> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
-            std::slice::from_raw_parts_mut(
-                &self.as_raw_ptr() as *const Ptr as *mut Repr,
-                self.len(),
-            )
+            std::slice::from_raw_parts_mut(&self.as_ptr() as *const Ptr as *mut Repr, self.len())
         }
     }
 }
@@ -293,7 +280,7 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceAccess<Repr> for CudaHostSl
     }
 
     fn as_raw_ptr(&self) -> Self::Ptr {
-        unsafe { self.ptr.offset(self.byte_offset()) }
+        self.ptr
     }
 
     fn subslice(self, range: std::ops::Range<usize>) -> Self {
@@ -324,7 +311,7 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceAccess<Repr>
     }
 
     fn as_raw_ptr(&self) -> Self::Ptr {
-        unsafe { self.ptr.offset(self.byte_offset()) }
+        self.ptr
     }
 
     fn subslice(self, range: std::ops::Range<usize>) -> Self {
@@ -351,7 +338,7 @@ impl<Repr: DeviceRepr, Dst: HostAccessible> CudaHostSliceMut<'_, Repr, Dst> {
         debug_assert!(src.len() <= self.len());
 
         let byte_count = self.byte_size();
-        unsafe { copy_dtoh(&mut self.as_raw_ptr(), &src.as_raw_ptr(), byte_count) }
+        unsafe { copy_dtoh(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
     }
 
     pub fn copy_from_device_async<Src>(
@@ -365,14 +352,7 @@ impl<Repr: DeviceRepr, Dst: HostAccessible> CudaHostSliceMut<'_, Repr, Dst> {
         debug_assert!(src.len() <= self.len());
 
         let byte_count = self.byte_size();
-        unsafe {
-            copy_dtoh_async(
-                &mut self.as_raw_ptr(),
-                &src.as_raw_ptr(),
-                byte_count,
-                &stream.inner,
-            )
-        }
+        unsafe { copy_dtoh_async(&mut self.as_ptr(), &src.as_ptr(), byte_count, &stream.inner) }
     }
 }
 
