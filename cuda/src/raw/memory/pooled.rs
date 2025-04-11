@@ -4,7 +4,10 @@ use cuda_sys::ffi as sys;
 
 use crate::{
     error::{CudaResult, ToResult},
-    raw::{ipc::ShareableHandle, stream::Stream},
+    raw::{
+        ipc::{CudaShareableHandle, ShareableHandle},
+        stream::Stream,
+    },
     wrap_sys_enum, wrap_sys_handle,
 };
 
@@ -173,17 +176,16 @@ impl DeviceAllocated for PooledDevicePtr {}
 
 wrap_sys_handle!(PooledPtrExportData, sys::CUmemPoolPtrExportData);
 
-impl PooledPtrExportData {
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        debug_assert!(bytes.len() == 64);
-        let mut reserved = [0u8; 64];
-        reserved.copy_from_slice(bytes);
-
-        Self(sys::CUmemPoolPtrExportData_st { reserved })
+impl CudaShareableHandle<u8, 64> for PooledPtrExportData {
+    fn from_bytes(bytes: &[u8; 64]) -> Self
+    where
+        Self: Sized,
+    {
+        Self(sys::CUmemPoolPtrExportData_st { reserved: *bytes })
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0.reserved
+    fn to_bytes(&self) -> [u8; 64] {
+        self.0.reserved
     }
 }
 
