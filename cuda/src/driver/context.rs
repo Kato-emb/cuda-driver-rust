@@ -11,19 +11,19 @@ pub struct CudaContext {
 
 impl CudaContext {
     pub fn id(&self) -> CudaResult<u64> {
-        unsafe { get_id(Some(self.inner)) }
+        unsafe { get_id(&Some(self.inner)) }
     }
 
     pub fn api_version(&self) -> CudaResult<u32> {
-        unsafe { get_api_version(self.inner) }
+        unsafe { get_api_version(&self.inner) }
     }
 
     pub fn record_event(&self, event: &CudaEvent) -> CudaResult<()> {
-        unsafe { record_event(self.inner, event.inner) }
+        unsafe { record_event(&self.inner, &event.inner) }
     }
 
     pub fn wait_event(&self, event: &CudaEvent) -> CudaResult<()> {
-        unsafe { wait_event(self.inner, event.inner) }
+        unsafe { wait_event(&self.inner, &event.inner) }
     }
 }
 
@@ -37,7 +37,7 @@ pub mod current {
     }
 
     pub fn id() -> CudaResult<u64> {
-        unsafe { context::get_id(None) }
+        unsafe { context::get_id(&None) }
     }
 
     pub fn flags() -> CudaResult<context::ContextFlags> {
@@ -82,7 +82,7 @@ impl Deref for CudaPrimaryContext {
 
 impl Drop for CudaPrimaryContext {
     fn drop(&mut self) {
-        if let Err(e) = unsafe { primary::release(self.device.inner) } {
+        if let Err(e) = unsafe { primary::release(&self.device.inner) } {
             log::error!("Failed to release CUDA context: {:?}", e);
         }
     }
@@ -90,7 +90,7 @@ impl Drop for CudaPrimaryContext {
 
 impl CudaPrimaryContext {
     pub fn new(device: CudaDevice) -> CudaResult<Self> {
-        let inner = unsafe { primary::retain(device.inner) }?;
+        let inner = unsafe { primary::retain(&device.inner) }?;
         Ok(Self {
             ctx: CudaContext { inner },
             device,
@@ -98,22 +98,22 @@ impl CudaPrimaryContext {
     }
 
     pub fn set_current(&self) -> CudaResult<()> {
-        unsafe { set_current(self.ctx.inner) }
+        unsafe { set_current(&self.ctx.inner) }
     }
 
     pub fn state(&self) -> CudaResult<(ContextFlags, bool)> {
-        unsafe { primary::get_state(self.device.inner) }
+        unsafe { primary::get_state(&self.device.inner) }
     }
 
     /// Destroy all allocations and reset all state on the primary context.
     /// ## Safety
     /// - ensure that no other module in the process is using the device any more.
     pub unsafe fn reset(&self) -> CudaResult<()> {
-        unsafe { primary::reset(self.device.inner) }
+        unsafe { primary::reset(&self.device.inner) }
     }
 
     pub fn set_flags(&self, flags: ContextFlags) -> CudaResult<()> {
-        unsafe { primary::set_flags(self.device.inner, flags) }
+        unsafe { primary::set_flags(&self.device.inner, flags) }
     }
 
     pub fn device(&self) -> &CudaDevice {

@@ -179,7 +179,7 @@ mod tests {
         unsafe { init::init(init::InitFlags::_ZERO) }.unwrap();
         let device = unsafe { device::get_device(0) }.unwrap();
         let ctx = unsafe { context::create(context::ContextFlags::SCHED_AUTO, device) }.unwrap();
-        unsafe { context::set_current(ctx) }.unwrap();
+        unsafe { context::set_current(&ctx) }.unwrap();
 
         let desc = ArrayDescriptor {
             0: sys::CUDA_ARRAY_DESCRIPTOR {

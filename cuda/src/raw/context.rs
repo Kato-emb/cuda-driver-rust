@@ -122,7 +122,7 @@ pub unsafe fn destroy(ctx: Context) -> CudaResult<()> {
 }
 
 /// Binds the specified CUDA context to the calling CPU thread.
-pub unsafe fn set_current(ctx: Context) -> CudaResult<()> {
+pub unsafe fn set_current(ctx: &Context) -> CudaResult<()> {
     unsafe { sys::cuCtxSetCurrent(ctx.0) }.to_result()
 }
 
@@ -133,7 +133,7 @@ pub unsafe fn get_current() -> CudaResult<Context> {
     Ok(Context(unsafe { ctx.assume_init() }))
 }
 
-pub unsafe fn push_current(ctx: Context) -> CudaResult<()> {
+pub unsafe fn push_current(ctx: &Context) -> CudaResult<()> {
     unsafe { sys::cuCtxPushCurrent_v2(ctx.0) }.to_result()
 }
 
@@ -144,11 +144,11 @@ pub unsafe fn pop_current() -> CudaResult<Context> {
     Ok(Context(unsafe { ctx.assume_init() }))
 }
 
-pub unsafe fn record_event(ctx: Context, event: Event) -> CudaResult<()> {
+pub unsafe fn record_event(ctx: &Context, event: &Event) -> CudaResult<()> {
     unsafe { sys::cuCtxRecordEvent(ctx.0, event.0) }.to_result()
 }
 
-pub unsafe fn wait_event(ctx: Context, event: Event) -> CudaResult<()> {
+pub unsafe fn wait_event(ctx: &Context, event: &Event) -> CudaResult<()> {
     unsafe { sys::cuCtxWaitEvent(ctx.0, event.0) }.to_result()
 }
 
@@ -182,7 +182,7 @@ pub unsafe fn get_device() -> CudaResult<Device> {
     Ok(Device(unsafe { device.assume_init() }))
 }
 
-pub unsafe fn get_api_version(ctx: Context) -> CudaResult<u32> {
+pub unsafe fn get_api_version(ctx: &Context) -> CudaResult<u32> {
     let mut version = 0;
     unsafe { sys::cuCtxGetApiVersion(ctx.0, &mut version) }.to_result()?;
 
@@ -196,7 +196,7 @@ pub unsafe fn synchronize() -> CudaResult<()> {
 /// Returns the unique Id associated with the context supplied.
 /// ## Returns
 /// * `ctxId` : If no context is supplied, the current context is used.
-pub unsafe fn get_id(ctx: Option<Context>) -> CudaResult<u64> {
+pub unsafe fn get_id(ctx: &Option<Context>) -> CudaResult<u64> {
     let mut id = 0;
     unsafe {
         sys::cuCtxGetId(
@@ -228,14 +228,14 @@ pub unsafe fn get_stream_priority_range() -> CudaResult<(i32, i32)> {
     Ok((min, max))
 }
 
-pub unsafe fn from_green_ctx(green_ctx: GreenContext) -> CudaResult<Context> {
+pub unsafe fn from_green_ctx(green_ctx: &GreenContext) -> CudaResult<Context> {
     let mut ctx = MaybeUninit::uninit();
     unsafe { sys::cuCtxFromGreenCtx(ctx.as_mut_ptr(), green_ctx.0) }.to_result()?;
 
     Ok(Context(unsafe { ctx.assume_init() }))
 }
 
-pub unsafe fn get_resource(ctx: Context, resource_type: ResourceType) -> CudaResult<Resource> {
+pub unsafe fn get_resource(ctx: &Context, resource_type: ResourceType) -> CudaResult<Resource> {
     let mut resource = MaybeUninit::uninit();
     unsafe { sys::cuCtxGetDevResource(ctx.0, resource.as_mut_ptr(), resource_type.into()) }
         .to_result()?;

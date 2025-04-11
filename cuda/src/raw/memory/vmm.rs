@@ -249,8 +249,8 @@ mod tests {
     fn test_cuda_raw_memory_vmm_mapping() {
         unsafe { init::init(init::InitFlags::_ZERO) }.unwrap();
         let device = unsafe { device::get_device(0) }.unwrap();
-        let ctx = unsafe { context::primary::retain(device) }.unwrap();
-        unsafe { context::set_current(ctx) }.unwrap();
+        let ctx = unsafe { context::primary::retain(&device) }.unwrap();
+        unsafe { context::set_current(&ctx) }.unwrap();
         println!("Current device: {:?}", device);
         println!("Current context: {:?}", unsafe { context::get_current() });
 
@@ -306,6 +306,6 @@ mod tests {
 
         unsafe { release(device_handle) }.unwrap();
         unsafe { address_free(reserve_ptr, page_size) }.unwrap();
-        unsafe { context::primary::release(device) }.unwrap();
+        unsafe { context::primary::release(&device) }.unwrap();
     }
 }

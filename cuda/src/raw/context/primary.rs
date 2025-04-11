@@ -9,7 +9,7 @@ use crate::{
 
 use super::{Context, ContextFlags};
 
-pub unsafe fn get_state(device: Device) -> CudaResult<(ContextFlags, bool)> {
+pub unsafe fn get_state(device: &Device) -> CudaResult<(ContextFlags, bool)> {
     let mut flags = 0;
     let mut active = 0;
     unsafe { sys::cuDevicePrimaryCtxGetState(device.0, &mut flags, &mut active) }.to_result()?;
@@ -20,22 +20,22 @@ pub unsafe fn get_state(device: Device) -> CudaResult<(ContextFlags, bool)> {
     Ok((flags, active))
 }
 
-pub unsafe fn retain(device: Device) -> CudaResult<Context> {
+pub unsafe fn retain(device: &Device) -> CudaResult<Context> {
     let mut context = MaybeUninit::uninit();
     unsafe { sys::cuDevicePrimaryCtxRetain(context.as_mut_ptr(), device.0) }.to_result()?;
 
     Ok(Context(unsafe { context.assume_init() }))
 }
 
-pub unsafe fn reset(device: Device) -> CudaResult<()> {
+pub unsafe fn reset(device: &Device) -> CudaResult<()> {
     unsafe { sys::cuDevicePrimaryCtxReset_v2(device.0) }.to_result()
 }
 
-pub unsafe fn release(device: Device) -> CudaResult<()> {
+pub unsafe fn release(device: &Device) -> CudaResult<()> {
     unsafe { sys::cuDevicePrimaryCtxRelease_v2(device.0) }.to_result()
 }
 
-pub unsafe fn set_flags(device: Device, flags: ContextFlags) -> CudaResult<()> {
+pub unsafe fn set_flags(device: &Device, flags: ContextFlags) -> CudaResult<()> {
     unsafe { sys::cuDevicePrimaryCtxSetFlags_v2(device.0, flags.bits()) }.to_result()
 }
 
@@ -49,18 +49,18 @@ mod tests {
     fn test_cuda_raw_context_primary_create() {
         unsafe { init::init(init::InitFlags::_ZERO) }.unwrap();
         let device = unsafe { device::get_device(0) }.unwrap();
-        let result = unsafe { retain(device) };
+        let result = unsafe { retain(&device) };
         assert!(result.is_ok(), "CUDA context creation failed: {:?}", result);
 
         let context = result.unwrap();
-        let result = unsafe { context::set_current(context) };
+        let result = unsafe { context::set_current(&context) };
         assert!(
             result.is_ok(),
             "CUDA context set current failed: {:?}",
             result
         );
 
-        let result = unsafe { get_state(device) };
+        let result = unsafe { get_state(&device) };
         assert!(
             result.is_ok(),
             "CUDA context state retrieval failed: {:?}",
@@ -74,7 +74,7 @@ mod tests {
             "CUDA context flags do not match"
         );
 
-        let result = unsafe { release(device) };
+        let result = unsafe { release(&device) };
         assert!(result.is_ok(), "CUDA context release failed: {:?}", result);
     }
 }
