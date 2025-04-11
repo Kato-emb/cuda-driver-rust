@@ -129,7 +129,7 @@ pub unsafe fn malloc(bytesize: usize) -> CudaResult<DevicePtr> {
     Ok(DevicePtr(ptr))
 }
 
-pub unsafe fn malloc_async(bytesize: usize, stream: Stream) -> CudaResult<DevicePtr> {
+pub unsafe fn malloc_async(bytesize: usize, stream: &Stream) -> CudaResult<DevicePtr> {
     let mut ptr = 0;
     unsafe { sys::cuMemAllocAsync(&mut ptr, bytesize, stream.0) }.to_result()?;
 
@@ -375,7 +375,7 @@ mod tests {
         let stream = unsafe { stream::create(stream::StreamFlags::DEFAULT) }.unwrap();
         let bytesize = 1024;
 
-        let mut ptr = unsafe { malloc_async(bytesize, stream) }.unwrap();
+        let mut ptr = unsafe { malloc_async(bytesize, &stream) }.unwrap();
         assert!(ptr.as_device_ptr() != 0);
 
         let (base, size) = unsafe { get_address_range(&ptr) }.unwrap();

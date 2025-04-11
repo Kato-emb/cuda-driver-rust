@@ -440,7 +440,7 @@ impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
 
     pub fn alloc_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
         let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
-        let ptr = unsafe { malloc_async(bytesize, stream.inner) }?;
+        let ptr = unsafe { malloc_async(bytesize, &stream.inner) }?;
 
         Ok(Self {
             ptr,
