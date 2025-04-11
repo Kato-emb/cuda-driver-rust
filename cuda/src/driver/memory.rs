@@ -385,8 +385,8 @@ impl<Repr: DeviceRepr, Ptr: DeviceAllocated> Drop for CudaDeviceBuffer<Repr, Ptr
 }
 
 impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceBuffer<Repr, Ptr> {
-    pub fn free(mut self) -> DropResult<Self> {
-        match unsafe { free(&mut self.ptr) } {
+    pub fn free(self) -> DropResult<Self> {
+        match unsafe { free(self.ptr) } {
             Ok(_) => {
                 // The pointer is now invalid, so we need to drop it.
                 std::mem::forget(self);
@@ -396,8 +396,8 @@ impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceBuffer<Repr, Ptr> {
         }
     }
 
-    pub fn free_async(mut self, stream: &CudaStream) -> DropResult<Self> {
-        match unsafe { free_async(&mut self.ptr, &stream.inner) } {
+    pub fn free_async(self, stream: &CudaStream) -> DropResult<Self> {
+        match unsafe { free_async(self.ptr, &stream.inner) } {
             Ok(_) => {
                 // The pointer is now invalid, so we need to drop it.
                 std::mem::forget(self);

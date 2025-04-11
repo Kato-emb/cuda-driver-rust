@@ -72,8 +72,8 @@ impl<Repr: DeviceRepr> Drop for CudaHostPinnedBuffer<Repr> {
 }
 
 impl<Repr: DeviceRepr> CudaHostPinnedBuffer<Repr> {
-    pub fn free(mut self) -> DropResult<Self> {
-        match unsafe { free_pinned(&mut self.ptr) } {
+    pub fn free(self) -> DropResult<Self> {
+        match unsafe { free_pinned(self.ptr) } {
             Ok(_) => {
                 // The pointer is now invalid, so we need to drop it.
                 std::mem::forget(self);

@@ -145,7 +145,7 @@ pub unsafe fn malloc_pinned_with_flags(
     Ok(PinnedHostPtr(ptr))
 }
 
-pub unsafe fn free_pinned(ptr: &mut PinnedHostPtr) -> CudaResult<()> {
+pub unsafe fn free_pinned(ptr: PinnedHostPtr) -> CudaResult<()> {
     unsafe { sys::cuMemFreeHost(ptr.as_host_ptr()) }.to_result()
 }
 

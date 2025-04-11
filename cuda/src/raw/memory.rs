@@ -149,14 +149,14 @@ pub unsafe fn malloc_pitch(
     Ok((DevicePtr(ptr), pitch))
 }
 
-pub unsafe fn free<P>(ptr: &mut P) -> CudaResult<()>
+pub unsafe fn free<P>(ptr: P) -> CudaResult<()>
 where
     P: DeviceAllocated,
 {
     unsafe { sys::cuMemFree_v2(ptr.as_device_ptr()) }.to_result()
 }
 
-pub unsafe fn free_async<P>(ptr: &mut P, stream: &Stream) -> CudaResult<()>
+pub unsafe fn free_async<P>(ptr: P, stream: &Stream) -> CudaResult<()>
 where
     P: DeviceAllocated,
 {
@@ -386,6 +386,6 @@ mod tests {
         unsafe { set_d16_async(&mut ptr, u16::MAX, 512, &stream) }.unwrap();
         unsafe { set_d32_async(&mut ptr, u32::MAX, 256, &stream) }.unwrap();
 
-        unsafe { free_async(&mut ptr, &stream) }.unwrap();
+        unsafe { free_async(ptr, &stream) }.unwrap();
     }
 }
