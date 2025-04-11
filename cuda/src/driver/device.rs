@@ -29,6 +29,10 @@ impl CudaDevice {
         Ok(Self { inner })
     }
 
+    pub fn as_raw(&self) -> i32 {
+        self.inner.0
+    }
+
     pub fn name(&self) -> CudaResult<String> {
         unsafe { get_name(self.inner) }
     }
