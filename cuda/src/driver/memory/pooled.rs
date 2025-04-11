@@ -235,15 +235,14 @@ impl<'fd> CudaMemoryPoolView<'fd> {
 
     pub fn import<Repr: DeviceRepr>(
         &self,
-        data: PooledPtrExportData,
-        len: usize,
+        data: &PooledPtrExportData,
+        byte_count: usize,
     ) -> CudaResult<CudaDevicePooledBuffer<Repr>> {
         let ptr = unsafe { import(&self.inner, &data) }?;
-        let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
 
         Ok(CudaDevicePooledBuffer {
             ptr,
-            size: bytesize,
+            size: byte_count,
             _marker: std::marker::PhantomData,
         })
     }
@@ -252,11 +251,8 @@ impl<'fd> CudaMemoryPoolView<'fd> {
 pub type CudaDevicePooledBuffer<Repr> = CudaDeviceBuffer<Repr, PooledDevicePtr>;
 
 impl<Repr: DeviceRepr> CudaDevicePooledBuffer<Repr> {
-    pub fn export(&self) -> CudaResult<(PooledPtrExportData, usize)> {
-        let data = unsafe { export(self.ptr) }?;
-        let len = self.size.wrapping_div(std::mem::size_of::<Repr>());
-
-        Ok((data, len))
+    pub fn export(&self) -> CudaResult<PooledPtrExportData> {
+        unsafe { export(self.ptr) }
     }
 }
 
@@ -307,9 +303,11 @@ mod tests {
             .set(u8::MAX)
             .unwrap();
 
-        let (data, size) = pooled_buffer.export().unwrap();
+        let data = pooled_buffer.export().unwrap();
 
-        let imported_buffer = pool_view.import::<u8>(data, size).unwrap();
+        let imported_buffer = pool_view
+            .import::<u8>(&data, pooled_buffer.as_slice().byte_size())
+            .unwrap();
         let imported_slice = imported_buffer.as_slice().subslice(300..500);
 
         let mut pinned_buffer = CudaHostPinnedBuffer::<u8>::alloc(imported_slice.len()).unwrap();

@@ -173,6 +173,20 @@ impl DeviceAllocated for PooledDevicePtr {}
 
 wrap_sys_handle!(PooledPtrExportData, sys::CUmemPoolPtrExportData);
 
+impl PooledPtrExportData {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        debug_assert!(bytes.len() == 64);
+        let mut reserved = [0u8; 64];
+        reserved.copy_from_slice(bytes);
+
+        Self(sys::CUmemPoolPtrExportData_st { reserved })
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0.reserved
+    }
+}
+
 pub unsafe fn malloc_pooled_async(
     bytesize: usize,
     pool: &MemoryPool,
