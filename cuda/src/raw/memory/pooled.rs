@@ -4,10 +4,8 @@ use cuda_sys::ffi as sys;
 
 use crate::{
     error::{CudaResult, ToResult},
-    raw::{
-        ipc::{CudaShareableHandle, ShareableHandle},
-        stream::Stream,
-    },
+    platform::ShareableOsHandle,
+    raw::{ipc::ShareableCudaHandle, stream::Stream},
     wrap_sys_enum, wrap_sys_handle,
 };
 
@@ -25,6 +23,14 @@ impl std::fmt::Debug for MemoryPool {
 }
 
 wrap_sys_handle!(MemoryPoolProps, sys::CUmemPoolProps);
+
+impl std::fmt::Debug for MemoryPoolProps {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MemoryPoolProps")
+            .field("handle", &self.0)
+            .finish()
+    }
+}
 
 wrap_sys_enum!(
     MemoryPoolAttribute,
@@ -104,7 +110,7 @@ pub unsafe fn trim_to(pool: &mut MemoryPool, keep: usize) -> CudaResult<()> {
     unsafe { sys::cuMemPoolTrimTo(pool.0, keep) }.to_result()
 }
 
-pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(
+pub unsafe fn export_to_shareable_handle<Handle: ShareableOsHandle>(
     pool: &MemoryPool,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
@@ -123,7 +129,7 @@ pub unsafe fn export_to_shareable_handle<Handle: ShareableHandle>(
     Ok(unsafe { handle.assume_init() })
 }
 
-pub unsafe fn import_from_shareable_handle<Handle: ShareableHandle>(
+pub unsafe fn import_from_shareable_handle<Handle: ShareableOsHandle>(
     handle: Handle,
     handle_type: AllocationHandleType,
     flags: ShareableHandleFlags,
@@ -176,7 +182,7 @@ impl DeviceAllocated for PooledDevicePtr {}
 
 wrap_sys_handle!(PooledPtrExportData, sys::CUmemPoolPtrExportData);
 
-impl CudaShareableHandle<u8, 64> for PooledPtrExportData {
+impl ShareableCudaHandle<u8, 64> for PooledPtrExportData {
     fn from_bytes(bytes: &[u8; 64]) -> Self
     where
         Self: Sized,

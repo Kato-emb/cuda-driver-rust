@@ -13,17 +13,7 @@ pub trait ShareableHandle {
     fn as_ptr(&self) -> *mut std::ffi::c_void;
 }
 
-#[cfg(target_os = "linux")]
-impl<T> ShareableHandle for T
-where
-    T: std::os::fd::AsRawFd,
-{
-    fn as_ptr(&self) -> *mut std::ffi::c_void {
-        self.as_raw_fd() as *mut std::ffi::c_void
-    }
-}
-
-pub trait CudaShareableHandle<T, const SIZE: usize> {
+pub trait ShareableCudaHandle<T, const SIZE: usize> {
     fn from_bytes(bytes: &[T; SIZE]) -> Self
     where
         Self: Sized;
@@ -33,7 +23,7 @@ pub trait CudaShareableHandle<T, const SIZE: usize> {
 wrap_sys_handle!(IpcMemoryHandle, sys::CUipcMemHandle);
 wrap_sys_handle!(IpcEventHandle, sys::CUipcEventHandle);
 
-impl CudaShareableHandle<i8, 64> for IpcMemoryHandle {
+impl ShareableCudaHandle<i8, 64> for IpcMemoryHandle {
     fn from_bytes(bytes: &[i8; 64]) -> Self
     where
         Self: Sized,
@@ -46,7 +36,7 @@ impl CudaShareableHandle<i8, 64> for IpcMemoryHandle {
     }
 }
 
-impl CudaShareableHandle<i8, 64> for IpcEventHandle {
+impl ShareableCudaHandle<i8, 64> for IpcEventHandle {
     fn from_bytes(bytes: &[i8; 64]) -> Self
     where
         Self: Sized,

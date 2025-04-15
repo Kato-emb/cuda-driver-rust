@@ -1,6 +1,7 @@
 use crate::{
     driver::{device::CudaDevice, stream::CudaStream},
     error::CudaResult,
+    platform::{OsBorrowedHandle, OsOwnedHandle},
     raw::memory::{
         AccessDesc, AccessFlags, AllocationHandleType, AllocationType, Location, LocationType,
         pooled::*,
@@ -49,10 +50,20 @@ impl CudaMemoryPool {
     pub fn new(max_size: usize, device: &CudaDevice) -> CudaResult<Self> {
         let mut props = MemoryPoolProps::default();
         props.0.allocType = AllocationType::Pinned.into();
-        props.0.handleTypes = AllocationHandleType::PosixFD.into();
+
+        if cfg!(target_os = "linux") {
+            props.0.handleTypes = AllocationHandleType::PosixFD.into();
+        } else if cfg!(target_os = "windows") {
+            props.0.handleTypes = AllocationHandleType::Win32.into();
+        } else {
+            panic!("Unsupported OS for CudaMemoryPool")
+        }
+
         props.0.maxSize = max_size;
         props.0.location.type_ = LocationType::Device.into();
         props.0.location.id = device.as_raw();
+
+        println!("Memory pool props: {:?}", props);
 
         Self::new_with_props(&props)
     }
@@ -62,11 +73,17 @@ impl CudaMemoryPool {
         Ok(Self { inner })
     }
 
-    #[cfg(target_os = "linux")]
-    pub fn to_fd(&self) -> CudaResult<std::os::fd::OwnedFd> {
+    pub fn to_fd(&self) -> CudaResult<OsOwnedHandle> {
         use crate::raw::memory::{AllocationHandleType, ShareableHandleFlags};
 
-        let handle_type = AllocationHandleType::PosixFD;
+        let handle_type = if cfg!(target_os = "linux") {
+            AllocationHandleType::PosixFD
+        } else if cfg!(target_os = "windows") {
+            AllocationHandleType::Win32
+        } else {
+            panic!("Unsupported OS for CudaMemoryPool")
+        };
+
         unsafe { export_to_shareable_handle(&self.inner, handle_type, ShareableHandleFlags::_ZERO) }
     }
 
@@ -214,15 +231,21 @@ impl CudaMemoryPool {
 #[derive(Debug)]
 pub struct CudaMemoryPoolView<'fd> {
     inner: MemoryPool,
-    _handle: std::os::fd::BorrowedFd<'fd>,
+    _handle: OsBorrowedHandle<'fd>,
 }
 
 impl<'fd> CudaMemoryPoolView<'fd> {
-    #[cfg(target_os = "linux")]
-    pub fn from_fd(handle: std::os::fd::BorrowedFd<'fd>) -> CudaResult<Self> {
+    pub fn from_fd(handle: OsBorrowedHandle<'fd>) -> CudaResult<Self> {
         use crate::raw::memory::{AllocationHandleType, ShareableHandleFlags};
 
-        let handle_type = AllocationHandleType::PosixFD;
+        let handle_type = if cfg!(target_os = "linux") {
+            AllocationHandleType::PosixFD
+        } else if cfg!(target_os = "windows") {
+            AllocationHandleType::Win32
+        } else {
+            panic!("Unsupported OS for CudaMemoryPoolView")
+        };
+
         let pool = unsafe {
             import_from_shareable_handle(handle, handle_type, ShareableHandleFlags::_ZERO)
         }?;
@@ -258,7 +281,7 @@ impl<Repr: DeviceRepr> CudaDevicePooledBuffer<Repr> {
 
 #[cfg(test)]
 mod tests {
-    use std::os::fd::{AsFd, AsRawFd};
+    use std::os::windows::io::AsHandle;
 
     use crate::{
         driver::{
@@ -266,6 +289,7 @@ mod tests {
             device::CudaDevice,
             memory::{CudaSliceAccess, pinned::CudaHostPinnedBuffer},
         },
+        platform::ShareableOsHandle,
         raw::stream::StreamFlags,
     };
 
@@ -289,9 +313,9 @@ mod tests {
         assert_eq!(flags, AccessFlags::ReadWrite);
 
         let fd = pool.to_fd().unwrap();
-        assert!(fd.as_raw_fd() > 0);
+        assert!(!fd.as_ptr().is_null());
 
-        let pool_view = CudaMemoryPoolView::from_fd(fd.as_fd()).unwrap();
+        let pool_view = CudaMemoryPoolView::from_fd(fd.as_handle()).unwrap();
         println!("Imported memory pool: {:?}", pool_view);
 
         let mut pooled_buffer = pool.alloc_async::<u8>(1024, &stream).unwrap();

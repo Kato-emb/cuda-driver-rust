@@ -1,6 +1,7 @@
 pub mod error;
 
 pub mod driver;
+pub mod platform;
 pub mod raw;
 
 // /// This macro initializes the thread context with default setting if it is not already initialized.
