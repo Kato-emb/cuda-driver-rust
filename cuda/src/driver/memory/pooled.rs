@@ -281,6 +281,8 @@ impl<Repr: DeviceRepr> CudaDevicePooledBuffer<Repr> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::fd::AsFd;
+    #[cfg(target_os = "windows")]
     use std::os::windows::io::AsHandle;
 
     use crate::{
@@ -315,7 +317,10 @@ mod tests {
         let fd = pool.to_fd().unwrap();
         assert!(!fd.as_ptr().is_null());
 
+        #[cfg(target_os = "windows")]
         let pool_view = CudaMemoryPoolView::from_fd(fd.as_handle()).unwrap();
+        #[cfg(target_os = "linux")]
+        let pool_view = CudaMemoryPoolView::from_fd(fd.as_fd()).unwrap();
         println!("Imported memory pool: {:?}", pool_view);
 
         let mut pooled_buffer = pool.alloc_async::<u8>(1024, &stream).unwrap();
