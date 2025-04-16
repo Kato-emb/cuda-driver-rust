@@ -21,10 +21,6 @@ impl CudaEvent {
         Ok(CudaEvent { inner: event })
     }
 
-    pub fn elapsed(&self, earlier: &CudaEvent) -> CudaResult<f32> {
-        unsafe { elapsed_time(&earlier.inner, &self.inner) }
-    }
-
     pub fn query(&self) -> CudaResult<bool> {
         unsafe { query(&self.inner) }
     }
@@ -43,5 +39,41 @@ impl CudaEvent {
 
     pub fn synchronize(&self) -> CudaResult<()> {
         unsafe { synchronize(&self.inner) }
+    }
+
+    pub fn elapsed(&self, earlier: &CudaEvent) -> CudaResult<f32> {
+        unsafe { elapsed_time(&earlier.inner, &self.inner) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        driver::{context::CudaPrimaryContext, device::CudaDevice},
+        raw::stream::StreamFlags,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_cuda_driver_event() {
+        crate::driver::init();
+        let ctx = CudaPrimaryContext::new(CudaDevice::new(0).unwrap()).unwrap();
+        ctx.set_current().unwrap();
+        let stream = CudaStream::new(StreamFlags::NON_BLOCKING).unwrap();
+
+        let event = CudaEvent::new(EventFlags::DEFAULT).unwrap();
+        event.record(&stream).unwrap();
+        assert!(!event.query().unwrap());
+        event.synchronize().unwrap();
+        assert!(event.query().unwrap());
+
+        let event2 = CudaEvent::new(EventFlags::DEFAULT).unwrap();
+        event2.record(&stream).unwrap();
+        event2.synchronize().unwrap();
+        assert!(event2.query().unwrap());
+
+        let elapsed = event2.elapsed(&event).unwrap();
+        assert!(elapsed >= 0.0, "Elapsed time should be non-negative");
     }
 }

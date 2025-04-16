@@ -5,6 +5,7 @@ use crate::error::CudaResult;
 pub mod context;
 pub mod device;
 pub mod event;
+pub mod ipc;
 pub mod memory;
 pub mod stream;
 
