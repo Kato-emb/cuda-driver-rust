@@ -9,10 +9,6 @@ use crate::{
 
 use super::{event::Event, memory::DevicePtr};
 
-pub trait ShareableHandle {
-    fn as_ptr(&self) -> *mut std::ffi::c_void;
-}
-
 pub trait ShareableCudaHandle<T, const SIZE: usize> {
     fn from_bytes(bytes: &[T; SIZE]) -> Self
     where

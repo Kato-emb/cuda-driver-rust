@@ -4,8 +4,7 @@ use cuda_sys::ffi as sys;
 
 use crate::{
     error::{CudaResult, ToResult},
-    platform::OsOwnedHandle,
-    raw::ipc::ShareableHandle,
+    platform::{OsOwnedHandle, ShareableOsHandle},
     wrap_sys_enum, wrap_sys_handle,
 };
 
@@ -171,7 +170,7 @@ pub unsafe fn export_to_shareable_handle(
     Ok(unsafe { handle.assume_init() })
 }
 
-pub unsafe fn import_from_shareable_handle<Handle: ShareableHandle>(
+pub unsafe fn import_from_shareable_handle<Handle: ShareableOsHandle>(
     os_handle: &Handle,
     handle_type: AllocationHandleType,
 ) -> CudaResult<DeviceHandle> {
