@@ -13,9 +13,10 @@ doctest = false
 [features]
 default = []
 
-ffi = ["bindgen"]
+ffi = ["bindgen", "regex"]
 
 [dependencies]
 
 [build-dependencies]
 bindgen = { version = "0.71.1", optional = true }
+regex = { version = "1", optional = true }
