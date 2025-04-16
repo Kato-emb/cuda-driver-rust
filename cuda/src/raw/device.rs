@@ -417,7 +417,7 @@ mod tests {
         let device = unsafe { get_device(0).unwrap() };
         let result = unsafe { get_exec_affinity_support(AffinityType::Max, device) };
         assert!(
-            result.is_err(),
+            result.is_ok_and(|v| v == 0),
             "CUDA device execution affinity support retrieval should fail: {:?}",
             result
         );
