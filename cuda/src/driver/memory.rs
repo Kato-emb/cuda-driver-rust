@@ -44,8 +44,64 @@ pub trait CudaSliceAccess<Repr: DeviceRepr> {
     fn byte_size(&self) -> usize {
         self.len().wrapping_mul(std::mem::size_of::<Repr>())
     }
+}
 
-    fn subslice(self, range: std::ops::Range<usize>) -> Self;
+pub trait CudaSliceReadable<Repr: DeviceRepr>: CudaSliceAccess<Repr> + Sized {
+    type Target: CudaSliceAccess<Repr>;
+
+    fn index(&self, range: std::ops::Range<usize>) -> Self::Target;
+
+    fn get<R>(&self, range: R) -> Option<Self::Target>
+    where
+        R: std::ops::RangeBounds<usize>,
+    {
+        let start = match range.start_bound() {
+            std::ops::Bound::Included(&start) => start,
+            std::ops::Bound::Excluded(&start) => start + 1,
+            std::ops::Bound::Unbounded => 0,
+        };
+
+        let end = match range.end_bound() {
+            std::ops::Bound::Included(&end) => end + 1,
+            std::ops::Bound::Excluded(&end) => end,
+            std::ops::Bound::Unbounded => self.len(),
+        };
+
+        if start >= end || end > self.len() {
+            return None;
+        }
+
+        Some(self.index(start..end))
+    }
+}
+
+pub trait CudaSliceWritable<Repr: DeviceRepr>: CudaSliceAccess<Repr> + Sized {
+    type Target: CudaSliceAccess<Repr>;
+
+    fn index_mut(&mut self, range: std::ops::Range<usize>) -> Self::Target;
+
+    fn get_mut<R>(&mut self, range: R) -> Option<Self::Target>
+    where
+        R: std::ops::RangeBounds<usize>,
+    {
+        let start = match range.start_bound() {
+            std::ops::Bound::Included(&start) => start,
+            std::ops::Bound::Excluded(&start) => start + 1,
+            std::ops::Bound::Unbounded => 0,
+        };
+
+        let end = match range.end_bound() {
+            std::ops::Bound::Included(&end) => end + 1,
+            std::ops::Bound::Excluded(&end) => end,
+            std::ops::Bound::Unbounded => self.len(),
+        };
+
+        if start >= end || end > self.len() {
+            return None;
+        }
+
+        Some(self.index_mut(start..end))
+    }
 }
 
 #[derive(Debug)]
@@ -80,11 +136,17 @@ impl<Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceAccess<Repr>
     fn as_raw_ptr(&self) -> Self::Ptr {
         self.ptr
     }
+}
 
-    fn subslice(self, range: std::ops::Range<usize>) -> Self {
+impl<'a, Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceReadable<Repr>
+    for CudaDeviceSlice<'a, Repr, Ptr>
+{
+    type Target = CudaDeviceSlice<'a, Repr, Ptr>;
+
+    fn index(&self, range: std::ops::Range<usize>) -> Self::Target {
         let offset = self.offset + (range.start as isize);
         let len = range.end - range.start;
-        debug_assert!(len <= self.len);
+        debug_assert!(len <= self.len, "{} > {}", len, self.len);
 
         CudaDeviceSlice {
             ptr: self.ptr,
@@ -111,8 +173,33 @@ impl<Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceAccess<Repr>
     fn as_raw_ptr(&self) -> Self::Ptr {
         self.ptr
     }
+}
 
-    fn subslice(self, range: std::ops::Range<usize>) -> Self {
+impl<'a, Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceReadable<Repr>
+    for CudaDeviceSliceMut<'a, Repr, Ptr>
+{
+    type Target = CudaDeviceSlice<'a, Repr, Ptr>;
+
+    fn index(&self, range: std::ops::Range<usize>) -> Self::Target {
+        let offset = self.offset + (range.start as isize);
+        let len = range.end - range.start;
+        debug_assert!(len <= self.len, "{} > {}", len, self.len);
+
+        CudaDeviceSlice {
+            ptr: self.ptr,
+            offset,
+            len,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, Repr: DeviceRepr, Ptr: DeviceAccessible> CudaSliceWritable<Repr>
+    for CudaDeviceSliceMut<'a, Repr, Ptr>
+{
+    type Target = CudaDeviceSliceMut<'a, Repr, Ptr>;
+
+    fn index_mut(&mut self, range: std::ops::Range<usize>) -> Self::Target {
         let offset = self.offset + (range.start as isize);
         let len = range.end - range.start;
         debug_assert!(len <= self.len, "{} > {}", len, self.len);
@@ -282,11 +369,17 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceAccess<Repr> for CudaHostSl
     fn as_raw_ptr(&self) -> Self::Ptr {
         self.ptr
     }
+}
 
-    fn subslice(self, range: std::ops::Range<usize>) -> Self {
+impl<'a, Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceReadable<Repr>
+    for CudaHostSlice<'a, Repr, Ptr>
+{
+    type Target = CudaHostSlice<'a, Repr, Ptr>;
+
+    fn index(&self, range: std::ops::Range<usize>) -> Self::Target {
         let offset = self.offset + (range.start as isize);
         let len = range.end - range.start;
-        debug_assert!(len <= self.len);
+        debug_assert!(len <= self.len, "{} > {}", len, self.len);
 
         CudaHostSlice {
             ptr: self.ptr,
@@ -313,10 +406,36 @@ impl<Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceAccess<Repr>
     fn as_raw_ptr(&self) -> Self::Ptr {
         self.ptr
     }
+}
 
-    fn subslice(self, range: std::ops::Range<usize>) -> Self {
+impl<'a, Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceReadable<Repr>
+    for CudaHostSliceMut<'a, Repr, Ptr>
+{
+    type Target = CudaHostSlice<'a, Repr, Ptr>;
+
+    fn index(&self, range: std::ops::Range<usize>) -> Self::Target {
         let offset = self.offset + (range.start as isize);
         let len = range.end - range.start;
+        debug_assert!(len <= self.len, "{} > {}", len, self.len);
+
+        CudaHostSlice {
+            ptr: self.ptr,
+            offset,
+            len,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, Repr: DeviceRepr, Ptr: HostAccessible> CudaSliceWritable<Repr>
+    for CudaHostSliceMut<'a, Repr, Ptr>
+{
+    type Target = CudaHostSliceMut<'a, Repr, Ptr>;
+
+    fn index_mut(&mut self, range: std::ops::Range<usize>) -> Self::Target {
+        let offset = self.offset + (range.start as isize);
+        let len = range.end - range.start;
+        debug_assert!(len <= self.len, "{} > {}", len, self.len);
 
         CudaHostSliceMut {
             ptr: self.ptr,
@@ -482,7 +601,11 @@ mod tests {
         assert!(buffer.ptr.0 != 0, "Failed to allocate CUDA device buffer");
         println!("Buffer: {:?}", buffer);
 
-        let mut slice = buffer.as_mut_slice().subslice(100..512);
+        assert!(buffer.as_slice().get(..1025).is_none());
+        assert!(buffer.as_slice().get(..512).is_some_and(|s| s.len() == 512));
+        assert!(buffer.as_slice().get(..).is_some_and(|s| s.len() == 1024));
+
+        let mut slice = buffer.as_mut_slice().get_mut(..512).unwrap();
         println!("Slice: {:?}", slice);
         println!(
             "offset: {}, size: {}",

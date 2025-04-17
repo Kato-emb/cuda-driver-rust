@@ -207,7 +207,7 @@ impl<Repr: DeviceRepr> PinnedBuffer<Repr> for CudaHostRegisteredBuffer<Repr> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        driver::{context::CudaPrimaryContext, device::CudaDevice, memory::CudaSliceAccess},
+        driver::{context::CudaPrimaryContext, device::CudaDevice, memory::CudaSliceWritable},
         raw::memory::HostAccessible,
     };
 
@@ -225,12 +225,12 @@ mod tests {
         assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", host_buffer);
 
-        let mut device_slice = host_buffer.as_device_mut().unwrap().subslice(100..500);
+        let mut device_slice = host_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
         device_slice.set(127u8).unwrap();
 
         for (idx, i) in host_buffer.as_slice().iter().enumerate() {
-            if idx >= 100 && idx < 500 {
+            if idx < 500 {
                 assert_eq!(*i, 127, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);
@@ -250,12 +250,12 @@ mod tests {
         assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", host_buffer);
 
-        let mut device_slice = host_buffer.as_device_mut().unwrap().subslice(100..500);
+        let mut device_slice = host_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
         device_slice.set(12345u16).unwrap();
 
         for (idx, i) in host_buffer.as_slice().iter().enumerate() {
-            if idx >= 100 && idx < 500 {
+            if idx < 500 {
                 assert_eq!(*i, 12345, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);
@@ -275,12 +275,12 @@ mod tests {
         assert!(host_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", host_buffer);
 
-        let mut device_slice = host_buffer.as_device_mut().unwrap().subslice(100..500);
+        let mut device_slice = host_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
         device_slice.set(12345u32).unwrap();
 
         for (idx, i) in host_buffer.as_slice().iter().enumerate() {
-            if idx >= 100 && idx < 500 {
+            if idx < 500 {
                 assert_eq!(*i, 12345, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);
@@ -304,14 +304,14 @@ mod tests {
         assert!(reg_buffer.ptr.as_host_ptr() != std::ptr::null_mut());
         println!("buffer: {:?}", reg_buffer);
 
-        let mut device_slice = reg_buffer.as_device_mut().unwrap().subslice(100..500);
+        let mut device_slice = reg_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
         device_slice.set(12345).unwrap();
 
         let vec = reg_buffer.unlock().unwrap();
 
         for (idx, i) in vec.iter().enumerate() {
-            if idx >= 100 && idx < 500 {
+            if idx < 500 {
                 assert_eq!(*i, 12345, "Index: {}", idx);
             } else {
                 assert_eq!(*i, 0, "Index: {}", idx);

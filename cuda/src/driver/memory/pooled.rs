@@ -290,7 +290,9 @@ mod tests {
         driver::{
             context::CudaPrimaryContext,
             device::CudaDevice,
-            memory::{CudaSliceAccess, pinned::CudaHostPinnedBuffer},
+            memory::{
+                CudaSliceAccess, CudaSliceReadable, CudaSliceWritable, pinned::CudaHostPinnedBuffer,
+            },
         },
         platform::ShareableOsHandle,
         raw::stream::StreamFlags,
@@ -329,7 +331,8 @@ mod tests {
 
         pooled_buffer
             .as_mut_slice()
-            .subslice(300..500)
+            .get_mut(300..500)
+            .unwrap()
             .set(u8::MAX)
             .unwrap();
 
@@ -338,7 +341,7 @@ mod tests {
         let imported_buffer = pool_view
             .import::<u8>(&data, pooled_buffer.as_slice().byte_size())
             .unwrap();
-        let imported_slice = imported_buffer.as_slice().subslice(300..500);
+        let imported_slice = imported_buffer.as_slice().get(300..500).unwrap();
 
         let mut pinned_buffer = CudaHostPinnedBuffer::<u8>::alloc(imported_slice.len()).unwrap();
         pinned_buffer

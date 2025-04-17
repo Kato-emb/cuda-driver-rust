@@ -123,7 +123,9 @@ impl<Repr: DeviceRepr> UnifiedSliceMut<Repr> for CudaHostSliceMut<'_, Repr, Unif
 mod tests {
     use crate::{
         driver::{
-            context::CudaPrimaryContext, device::CudaDevice, memory::pinned::CudaHostPinnedBuffer,
+            context::CudaPrimaryContext,
+            device::CudaDevice,
+            memory::{CudaSliceWritable, pinned::CudaHostPinnedBuffer},
         },
         raw::stream::StreamFlags,
     };
@@ -154,11 +156,11 @@ mod tests {
             assert_eq!(*i, 127);
         }
 
-        let device_slice = host_slice.prefetch_device_mut_async(&stream).unwrap();
+        let mut device_slice = host_slice.prefetch_device_mut_async(&stream).unwrap();
         stream.synchronize().unwrap();
         println!("device slice: {:?}", device_slice);
 
-        device_slice.subslice(100..128).set(0).unwrap();
+        device_slice.get_mut(100..128).unwrap().set(0).unwrap();
 
         let mut pinned_buffer = CudaHostPinnedBuffer::alloc(128).unwrap();
         let mut pinned_slice = pinned_buffer.as_mut_slice();
