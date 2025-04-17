@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(ptr_ctx.inner.0, ctx.inner.0);
 
         let mut device_slice = unified_buffer.as_mut_slice();
-        device_slice.set(127).unwrap();
+        device_slice.set_d8(127).unwrap();
         let mut host_slice = device_slice.prefetch_host_mut_async(&stream).unwrap();
         stream.synchronize().unwrap();
         println!("host slice: {:?}", host_slice);
@@ -160,7 +160,7 @@ mod tests {
         stream.synchronize().unwrap();
         println!("device slice: {:?}", device_slice);
 
-        device_slice.get_mut(100..128).unwrap().set(0).unwrap();
+        device_slice.get_mut(100..128).unwrap().set_d8(0).unwrap();
 
         let mut pinned_buffer = CudaHostPinnedBuffer::alloc(128).unwrap();
         let mut pinned_slice = pinned_buffer.as_mut_slice();

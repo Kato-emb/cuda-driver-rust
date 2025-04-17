@@ -9,20 +9,31 @@ pub mod pooled;
 pub mod unified;
 
 pub unsafe trait DeviceRepr: Copy + 'static {}
+pub unsafe trait Align1: DeviceRepr {}
+pub unsafe trait Align2: DeviceRepr {}
+pub unsafe trait Align4: DeviceRepr {}
+
 unsafe impl DeviceRepr for bool {}
 unsafe impl DeviceRepr for i8 {}
+unsafe impl Align1 for i8 {}
 unsafe impl DeviceRepr for i16 {}
+unsafe impl Align2 for i16 {}
 unsafe impl DeviceRepr for i32 {}
+unsafe impl Align4 for i32 {}
 unsafe impl DeviceRepr for i64 {}
 unsafe impl DeviceRepr for i128 {}
 unsafe impl DeviceRepr for isize {}
 unsafe impl DeviceRepr for u8 {}
+unsafe impl Align1 for u8 {}
 unsafe impl DeviceRepr for u16 {}
+unsafe impl Align2 for u16 {}
 unsafe impl DeviceRepr for u32 {}
+unsafe impl Align4 for u32 {}
 unsafe impl DeviceRepr for u64 {}
 unsafe impl DeviceRepr for u128 {}
 unsafe impl DeviceRepr for usize {}
 unsafe impl DeviceRepr for f32 {}
+unsafe impl Align4 for f32 {}
 unsafe impl DeviceRepr for f64 {}
 
 pub trait CudaSliceAccess<Repr: DeviceRepr> {
@@ -267,51 +278,73 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         let byte_count = src.byte_size();
         unsafe { copy_htod_async(&mut self.as_ptr(), &src.as_ptr(), byte_count, &stream.inner) }
     }
+}
 
-    pub fn set(&mut self, value: Repr) -> CudaResult<()> {
-        let size = std::mem::size_of::<Repr>();
+impl<Repr: Align1, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> {
+    pub fn set_d8(&mut self, value: Repr) -> CudaResult<()> {
+        debug_assert!(std::mem::size_of::<Repr>() == std::mem::size_of::<u8>());
         let num_elements = self.len();
 
-        match size {
-            1 => unsafe {
-                let bits = std::mem::transmute_copy::<Repr, u8>(&value);
-                set_d8(&mut self.as_ptr(), bits, num_elements)
-            },
-            2 => unsafe {
-                let bits = std::mem::transmute_copy::<Repr, u16>(&value);
-                set_d16(&mut self.as_ptr(), bits, num_elements)
-            },
-            4 => unsafe {
-                let bits = std::mem::transmute_copy::<Repr, u32>(&value);
-                set_d32(&mut self.as_ptr(), bits, num_elements)
-            },
-            _ => panic!("Unsupported size: {}", size),
+        unsafe {
+            let bits = std::mem::transmute_copy::<Repr, u8>(&value);
+            set_d8(&mut self.as_ptr(), bits, num_elements)
         }
     }
 
-    pub unsafe fn set_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
-        let size = std::mem::size_of::<Repr>();
+    pub unsafe fn set_d8_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
+        debug_assert!(std::mem::size_of::<Repr>() == std::mem::size_of::<u8>());
         let num_elements = self.len();
 
-        match size {
-            1 => unsafe {
-                let bits = std::mem::transmute_copy::<Repr, u8>(&value);
-                set_d8_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
-            },
-            2 => unsafe {
-                let bits = std::mem::transmute_copy::<Repr, u16>(&value);
-                set_d16_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
-            },
-            4 => unsafe {
-                let bits = std::mem::transmute_copy::<Repr, u32>(&value);
-                set_d32_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
-            },
-            _ => panic!("Unsupported size: {}", size),
+        unsafe {
+            let bits = std::mem::transmute_copy::<Repr, u8>(&value);
+            set_d8_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
         }
     }
 }
 
-impl<Dst: DeviceAccessible> CudaDeviceSliceMut<'_, u8, Dst> {}
+impl<Repr: Align2, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> {
+    pub fn set_d16(&mut self, value: Repr) -> CudaResult<()> {
+        debug_assert!(std::mem::size_of::<Repr>() == std::mem::size_of::<u16>());
+        let num_elements = self.len();
+
+        unsafe {
+            let bits = std::mem::transmute_copy::<Repr, u16>(&value);
+            set_d16(&mut self.as_ptr(), bits, num_elements)
+        }
+    }
+
+    pub unsafe fn set_d16_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
+        debug_assert!(std::mem::size_of::<Repr>() == std::mem::size_of::<u16>());
+        let num_elements = self.len();
+
+        unsafe {
+            let bits = std::mem::transmute_copy::<Repr, u16>(&value);
+            set_d16_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
+        }
+    }
+}
+
+impl<Repr: Align4, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> {
+    pub fn set_d32(&mut self, value: Repr) -> CudaResult<()> {
+        debug_assert!(std::mem::size_of::<Repr>() == std::mem::size_of::<u32>());
+        let num_elements = self.len();
+
+        unsafe {
+            let bits = std::mem::transmute_copy::<Repr, u32>(&value);
+            set_d32(&mut self.as_ptr(), bits, num_elements)
+        }
+    }
+
+    pub unsafe fn set_d32_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
+        debug_assert!(std::mem::size_of::<Repr>() == std::mem::size_of::<u32>());
+        let num_elements = self.len();
+
+        unsafe {
+            let bits = std::mem::transmute_copy::<Repr, u32>(&value);
+            set_d32_async(&mut self.as_ptr(), bits, num_elements, &stream.inner)
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct CudaHostSlice<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
@@ -614,6 +647,6 @@ mod tests {
             slice.byte_offset(),
             slice.byte_size()
         );
-        slice.set(u32::MAX).unwrap();
+        slice.set_d32(u32::MAX).unwrap();
     }
 }

@@ -227,7 +227,7 @@ mod tests {
 
         let mut device_slice = host_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
-        device_slice.set(127u8).unwrap();
+        device_slice.set_d8(127u8).unwrap();
 
         for (idx, i) in host_buffer.as_slice().iter().enumerate() {
             if idx < 500 {
@@ -252,7 +252,7 @@ mod tests {
 
         let mut device_slice = host_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
-        device_slice.set(12345u16).unwrap();
+        device_slice.set_d16(12345u16).unwrap();
 
         for (idx, i) in host_buffer.as_slice().iter().enumerate() {
             if idx < 500 {
@@ -277,7 +277,7 @@ mod tests {
 
         let mut device_slice = host_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
-        device_slice.set(12345u32).unwrap();
+        device_slice.set_d32(12345u32).unwrap();
 
         for (idx, i) in host_buffer.as_slice().iter().enumerate() {
             if idx < 500 {
@@ -306,7 +306,7 @@ mod tests {
 
         let mut device_slice = reg_buffer.as_device_mut().unwrap().get_mut(..500).unwrap();
         println!("slice: {:?}", device_slice);
-        device_slice.set(12345).unwrap();
+        device_slice.set_d32(12345).unwrap();
 
         let vec = reg_buffer.unlock().unwrap();
 

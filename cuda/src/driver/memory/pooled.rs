@@ -333,7 +333,7 @@ mod tests {
             .as_mut_slice()
             .get_mut(300..500)
             .unwrap()
-            .set(u8::MAX)
+            .set_d8(u8::MAX)
             .unwrap();
 
         let data = pooled_buffer.export().unwrap();
