@@ -33,6 +33,30 @@ pub trait HostAccessible: CudaPointer + Copy {
 /// Deallocated by CUDA, call [free()] or [free_async()] to deallocate.
 pub trait DeviceAllocated: DeviceAccessible {}
 
+wrap_sys_handle!(HostPtr, *mut std::ffi::c_void);
+
+unsafe impl CudaPointer for HostPtr {
+    unsafe fn from_raw_ptr<P: Sized>(ptr: *mut P) -> Self {
+        HostPtr(ptr as *mut std::ffi::c_void)
+    }
+
+    unsafe fn offset(self, byte_count: isize) -> Self
+    where
+        Self: Sized,
+    {
+        let ptr = self.as_host_ptr() as *mut u8;
+        let new_ptr = ptr.wrapping_offset(byte_count) as *mut std::ffi::c_void;
+        HostPtr(new_ptr)
+    }
+}
+
+impl HostAccessible for HostPtr {
+    #[inline(always)]
+    fn as_host_ptr(&self) -> *mut std::ffi::c_void {
+        self.0
+    }
+}
+
 wrap_sys_handle!(DevicePtr, sys::CUdeviceptr);
 
 unsafe impl CudaPointer for DevicePtr {

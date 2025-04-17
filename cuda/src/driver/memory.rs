@@ -354,11 +354,11 @@ pub struct CudaHostSlice<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
     _marker: std::marker::PhantomData<&'a [Repr]>,
 }
 
-impl<'a, Repr: DeviceRepr, Ptr: HostAccessible> From<&'a [Repr]> for CudaHostSlice<'a, Repr, Ptr> {
+impl<'a, Repr: DeviceRepr> From<&'a [Repr]> for CudaHostSlice<'a, Repr, HostPtr> {
     fn from(slice: &'a [Repr]) -> Self {
         let len = slice.len();
         let offset = 0;
-        let ptr = unsafe { Ptr::from_raw_ptr::<Repr>(slice.as_ptr() as *mut _) };
+        let ptr = unsafe { HostPtr::from_raw_ptr::<Repr>(slice.as_ptr() as *mut _) };
 
         CudaHostSlice {
             ptr,
@@ -377,13 +377,11 @@ pub struct CudaHostSliceMut<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
     _marker: std::marker::PhantomData<&'a mut [Repr]>,
 }
 
-impl<'a, Repr: DeviceRepr, Ptr: HostAccessible> From<&'a mut [Repr]>
-    for CudaHostSlice<'a, Repr, Ptr>
-{
+impl<'a, Repr: DeviceRepr> From<&'a mut [Repr]> for CudaHostSlice<'a, Repr, HostPtr> {
     fn from(slice: &'a mut [Repr]) -> Self {
         let len = slice.len();
         let offset = 0;
-        let ptr = unsafe { Ptr::from_raw_ptr::<Repr>(slice.as_ptr() as *mut _) };
+        let ptr = unsafe { HostPtr::from_raw_ptr::<Repr>(slice.as_ptr() as *mut _) };
 
         CudaHostSlice {
             ptr,
