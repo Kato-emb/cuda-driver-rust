@@ -55,6 +55,11 @@ impl CudaMemoryPool {
             props.0.handleTypes = AllocationHandleType::PosixFD.into();
         } else if cfg!(target_os = "windows") {
             props.0.handleTypes = AllocationHandleType::Win32.into();
+            let mut sa = Box::new(windows::Win32::Security::SECURITY_ATTRIBUTES::default());
+            sa.nLength =
+                std::mem::size_of::<windows::Win32::Security::SECURITY_ATTRIBUTES>() as u32;
+            sa.bInheritHandle = true.into();
+            props.0.win32SecurityAttributes = Box::leak(sa) as *mut _ as *mut std::ffi::c_void;
         } else {
             panic!("Unsupported OS for CudaMemoryPool")
         }
