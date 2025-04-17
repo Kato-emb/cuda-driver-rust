@@ -227,7 +227,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         unsafe { copy_dtod(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
     }
 
-    pub fn copy_from_device_async<Src>(
+    pub unsafe fn copy_from_device_async<Src>(
         &mut self,
         src: &impl CudaSliceAccess<Repr, Ptr = Src>,
         stream: &CudaStream,
@@ -254,7 +254,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         unsafe { copy_htod(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
     }
 
-    pub fn copy_from_host_async<Src>(
+    pub unsafe fn copy_from_host_async<Src>(
         &mut self,
         src: &impl CudaSliceAccess<Repr, Ptr = Src>,
         stream: &CudaStream,
@@ -289,7 +289,7 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         }
     }
 
-    pub fn set_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
+    pub unsafe fn set_async(&mut self, value: Repr, stream: &CudaStream) -> CudaResult<()> {
         let size = std::mem::size_of::<Repr>();
         let num_elements = self.len();
 
@@ -310,6 +310,8 @@ impl<Repr: DeviceRepr, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> 
         }
     }
 }
+
+impl<Dst: DeviceAccessible> CudaDeviceSliceMut<'_, u8, Dst> {}
 
 #[derive(Debug)]
 pub struct CudaHostSlice<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
@@ -460,7 +462,7 @@ impl<Repr: DeviceRepr, Dst: HostAccessible> CudaHostSliceMut<'_, Repr, Dst> {
         unsafe { copy_dtoh(&mut self.as_ptr(), &src.as_ptr(), byte_count) }
     }
 
-    pub fn copy_from_device_async<Src>(
+    pub unsafe fn copy_from_device_async<Src>(
         &mut self,
         src: &impl CudaSliceAccess<Repr, Ptr = Src>,
         stream: &CudaStream,
@@ -557,7 +559,7 @@ impl<Repr: DeviceRepr> CudaDeviceBuffer<Repr, DevicePtr> {
         })
     }
 
-    pub fn alloc_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
+    pub unsafe fn alloc_async(len: usize, stream: &CudaStream) -> CudaResult<Self> {
         let bytesize = len.wrapping_mul(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc_async(bytesize, &stream.inner) }?;
 

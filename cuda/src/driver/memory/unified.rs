@@ -166,9 +166,8 @@ mod tests {
         let mut pinned_slice = pinned_buffer.as_mut_slice();
 
         pinned_slice
-            .copy_from_device_async(&unified_buffer.as_slice(), &stream)
+            .copy_from_device(&unified_buffer.as_slice())
             .unwrap();
-        stream.synchronize().unwrap();
         println!("pinned slice: {:?}", pinned_slice);
 
         for (idx, i) in pinned_slice.iter().enumerate() {
