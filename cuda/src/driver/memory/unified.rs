@@ -30,7 +30,7 @@ impl<Repr: DeviceRepr> CudaDeviceUnifiedBuffer<Repr> {
 }
 
 pub trait UnifiedSlice<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDevicePtr> {
-    fn prefetch_host_async(
+    unsafe fn prefetch_host_async(
         &self,
         stream: &CudaStream,
     ) -> CudaResult<CudaHostSlice<Repr, UnifiedDevicePtr>> {
@@ -71,7 +71,7 @@ pub trait UnifiedSlice<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDev
 }
 
 pub trait UnifiedSliceMut<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDevicePtr> {
-    fn prefetch_host_mut_async(
+    unsafe fn prefetch_host_mut_async(
         &mut self,
         stream: &CudaStream,
     ) -> CudaResult<CudaHostSliceMut<Repr, UnifiedDevicePtr>> {
@@ -148,7 +148,7 @@ mod tests {
 
         let mut device_slice = unified_buffer.as_mut_slice();
         device_slice.set_d8(127).unwrap();
-        let mut host_slice = device_slice.prefetch_host_mut_async(&stream).unwrap();
+        let mut host_slice = unsafe { device_slice.prefetch_host_mut_async(&stream) }.unwrap();
         stream.synchronize().unwrap();
         println!("host slice: {:?}", host_slice);
 

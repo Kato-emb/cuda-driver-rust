@@ -111,7 +111,7 @@ impl CudaMemoryPool {
         unsafe { set_access(&self.inner, &[desc]) }
     }
 
-    pub fn alloc_async<Repr: DeviceRepr>(
+    pub unsafe fn alloc_async<Repr: DeviceRepr>(
         &self,
         len: usize,
         stream: &CudaStream,
@@ -326,7 +326,7 @@ mod tests {
         let pool_view = CudaMemoryPoolView::from_fd(fd.as_handle()).unwrap();
         println!("Imported memory pool: {:?}", pool_view);
 
-        let mut pooled_buffer = pool.alloc_async::<u8>(1024, &stream).unwrap();
+        let mut pooled_buffer = unsafe { pool.alloc_async::<u8>(1024, &stream) }.unwrap();
         assert_eq!(pool.current_memory_used_size().unwrap(), 1024);
 
         pooled_buffer
