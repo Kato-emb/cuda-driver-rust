@@ -4,10 +4,7 @@ use crate::{
     raw::memory::{Location, LocationType, unified::*},
 };
 
-use super::{
-    CudaDeviceBuffer, CudaDeviceSlice, CudaDeviceSliceMut, CudaHostSlice, CudaHostSliceMut,
-    CudaSliceAccess, DeviceRepr,
-};
+use super::{CudaDeviceBuffer, CudaDeviceSlice, CudaHostSlice, CudaSliceAccess, DeviceRepr};
 
 pub type CudaDeviceUnifiedBuffer<Repr> = CudaDeviceBuffer<Repr, UnifiedDevicePtr>;
 
@@ -29,95 +26,109 @@ impl<Repr: DeviceRepr> CudaDeviceUnifiedBuffer<Repr> {
     }
 }
 
-pub trait UnifiedSlice<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDevicePtr> {
-    unsafe fn prefetch_host_async(
-        &self,
-        stream: &CudaStream,
-    ) -> CudaResult<CudaHostSlice<Repr, UnifiedDevicePtr>> {
-        let count = self.byte_size();
-        let mut location = Location::default();
-        location.0.type_ = LocationType::Host.into();
-        location.0.id = 0;
+#[cfg(target_os = "linux")]
+pub use unified_slice_impls::*;
 
-        unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+#[cfg(target_os = "linux")]
+pub mod unified_slice_impls {
+    use crate::driver::memory::{CudaDeviceSliceMut, CudaHostSliceMut};
 
-        Ok(CudaHostSlice {
-            ptr: self.as_raw_ptr(),
-            offset: self.offset(),
-            len: self.len(),
-            _marker: std::marker::PhantomData,
-        })
+    use super::*;
+
+    pub trait UnifiedSlice<Repr: DeviceRepr>:
+        CudaSliceAccess<Repr, Ptr = UnifiedDevicePtr>
+    {
+        unsafe fn prefetch_host_async(
+            &self,
+            stream: &CudaStream,
+        ) -> CudaResult<CudaHostSlice<Repr, UnifiedDevicePtr>> {
+            let count = self.byte_size();
+            let mut location = Location::default();
+            location.0.type_ = LocationType::Host.into();
+            location.0.id = 0;
+
+            unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+
+            Ok(CudaHostSlice {
+                ptr: self.as_raw_ptr(),
+                offset: self.offset(),
+                len: self.len(),
+                _marker: std::marker::PhantomData,
+            })
+        }
+
+        fn prefetch_device_async(
+            &self,
+            stream: &CudaStream,
+        ) -> CudaResult<CudaDeviceSlice<Repr, UnifiedDevicePtr>> {
+            let device = stream.device()?;
+            let count = self.byte_size();
+            let mut location = Location::default();
+            location.0.type_ = LocationType::Device.into();
+            location.0.id = device.as_raw();
+
+            unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+
+            Ok(CudaDeviceSlice {
+                ptr: self.as_raw_ptr(),
+                offset: self.offset(),
+                len: self.len(),
+                _marker: std::marker::PhantomData,
+            })
+        }
     }
 
-    fn prefetch_device_async(
-        &self,
-        stream: &CudaStream,
-    ) -> CudaResult<CudaDeviceSlice<Repr, UnifiedDevicePtr>> {
-        let device = stream.device()?;
-        let count = self.byte_size();
-        let mut location = Location::default();
-        location.0.type_ = LocationType::Device.into();
-        location.0.id = device.as_raw();
+    pub trait UnifiedSliceMut<Repr: DeviceRepr>:
+        CudaSliceAccess<Repr, Ptr = UnifiedDevicePtr>
+    {
+        unsafe fn prefetch_host_mut_async(
+            &mut self,
+            stream: &CudaStream,
+        ) -> CudaResult<CudaHostSliceMut<Repr, UnifiedDevicePtr>> {
+            let count = self.byte_size();
+            let mut location = Location::default();
+            location.0.type_ = LocationType::Host.into();
+            location.0.id = 0;
 
-        unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+            unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
 
-        Ok(CudaDeviceSlice {
-            ptr: self.as_raw_ptr(),
-            offset: self.offset(),
-            len: self.len(),
-            _marker: std::marker::PhantomData,
-        })
+            Ok(CudaHostSliceMut {
+                ptr: self.as_raw_ptr(),
+                offset: self.offset(),
+                len: self.len(),
+                _marker: std::marker::PhantomData,
+            })
+        }
+
+        fn prefetch_device_mut_async(
+            &mut self,
+            stream: &CudaStream,
+        ) -> CudaResult<CudaDeviceSliceMut<Repr, UnifiedDevicePtr>> {
+            let device = stream.device()?;
+            let count = self.byte_size();
+            let mut location = Location::default();
+            location.0.type_ = LocationType::Device.into();
+            location.0.id = device.as_raw();
+
+            unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+
+            Ok(CudaDeviceSliceMut {
+                ptr: self.as_raw_ptr(),
+                offset: self.offset(),
+                len: self.len(),
+                _marker: std::marker::PhantomData,
+            })
+        }
     }
+
+    impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaDeviceSlice<'_, Repr, UnifiedDevicePtr> {}
+    impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaDeviceSliceMut<'_, Repr, UnifiedDevicePtr> {}
+    impl<Repr: DeviceRepr> UnifiedSliceMut<Repr> for CudaDeviceSliceMut<'_, Repr, UnifiedDevicePtr> {}
+
+    impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaHostSlice<'_, Repr, UnifiedDevicePtr> {}
+    impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaHostSliceMut<'_, Repr, UnifiedDevicePtr> {}
+    impl<Repr: DeviceRepr> UnifiedSliceMut<Repr> for CudaHostSliceMut<'_, Repr, UnifiedDevicePtr> {}
 }
-
-pub trait UnifiedSliceMut<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDevicePtr> {
-    unsafe fn prefetch_host_mut_async(
-        &mut self,
-        stream: &CudaStream,
-    ) -> CudaResult<CudaHostSliceMut<Repr, UnifiedDevicePtr>> {
-        let count = self.byte_size();
-        let mut location = Location::default();
-        location.0.type_ = LocationType::Host.into();
-        location.0.id = 0;
-
-        unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
-
-        Ok(CudaHostSliceMut {
-            ptr: self.as_raw_ptr(),
-            offset: self.offset(),
-            len: self.len(),
-            _marker: std::marker::PhantomData,
-        })
-    }
-
-    fn prefetch_device_mut_async(
-        &mut self,
-        stream: &CudaStream,
-    ) -> CudaResult<CudaDeviceSliceMut<Repr, UnifiedDevicePtr>> {
-        let device = stream.device()?;
-        let count = self.byte_size();
-        let mut location = Location::default();
-        location.0.type_ = LocationType::Device.into();
-        location.0.id = device.as_raw();
-
-        unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
-
-        Ok(CudaDeviceSliceMut {
-            ptr: self.as_raw_ptr(),
-            offset: self.offset(),
-            len: self.len(),
-            _marker: std::marker::PhantomData,
-        })
-    }
-}
-
-impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaDeviceSlice<'_, Repr, UnifiedDevicePtr> {}
-impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaDeviceSliceMut<'_, Repr, UnifiedDevicePtr> {}
-impl<Repr: DeviceRepr> UnifiedSliceMut<Repr> for CudaDeviceSliceMut<'_, Repr, UnifiedDevicePtr> {}
-
-impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaHostSlice<'_, Repr, UnifiedDevicePtr> {}
-impl<Repr: DeviceRepr> UnifiedSlice<Repr> for CudaHostSliceMut<'_, Repr, UnifiedDevicePtr> {}
-impl<Repr: DeviceRepr> UnifiedSliceMut<Repr> for CudaHostSliceMut<'_, Repr, UnifiedDevicePtr> {}
 
 #[cfg(test)]
 mod tests {
@@ -138,6 +149,22 @@ mod tests {
         let device = CudaDevice::new(0).unwrap();
         let ctx = CudaPrimaryContext::new(device).unwrap();
         ctx.set_current().unwrap();
+
+        println!("{:?}", ctx.device().is_concurrent_managed_access());
+
+        let mut unified_buffer =
+            CudaDeviceUnifiedBuffer::<u8>::alloc_unified(128, MemoryAttachFlags::GLOBAL).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_cuda_driver_memory_unified_alloc() {
+        crate::driver::init();
+        let device = CudaDevice::new(0).unwrap();
+        let ctx = CudaPrimaryContext::new(device).unwrap();
+        ctx.set_current().unwrap();
+
+        println!("{:?}", ctx.device().is_unified_addressing());
 
         let stream = CudaStream::new(StreamFlags::NON_BLOCKING).unwrap();
 
