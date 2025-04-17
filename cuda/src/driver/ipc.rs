@@ -84,6 +84,7 @@ mod tests {
         let exec = std::env::current_exe().unwrap();
         let mut child = std::process::Command::new(&exec)
             .args(["child_process", "--nocapture"])
+            .env("CHILD_ENABLED", "1")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit())
@@ -113,6 +114,10 @@ mod tests {
 
     #[test]
     fn child_process() {
+        if std::env::var("CHILD_ENABLED").is_err() {
+            return;
+        }
+
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
         let context = CudaPrimaryContext::new(device).unwrap();
