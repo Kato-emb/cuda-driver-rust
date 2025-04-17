@@ -52,6 +52,20 @@ impl CudaDevice {
         unsafe { get_attribute(attr, self.inner) }
     }
 
+    pub fn is_unified_addressing(&self) -> CudaResult<bool> {
+        self.attribute(DeviceAttribute::UnifiedAddressing)
+            .map(|v| v == 1)
+    }
+
+    /// Device can coherently access managed memory concurrently with the CPU.
+    /// ### Returns
+    /// - `true` : Device can access managed memory concurrently with the CPU.
+    /// - `false`: Device cannot access managed memory concurrently with the CPU. Not prefetchable.
+    pub fn is_concurrent_managed_access(&self) -> CudaResult<bool> {
+        self.attribute(DeviceAttribute::ConcurrentManagedAccess)
+            .map(|v| v == 1)
+    }
+
     // pub fn default_memory_pool(&self) -> CudaResult<> {}
 
     pub fn is_affinity_supported(&self) -> CudaResult<bool> {
