@@ -1,9 +1,17 @@
 use crate::{
     error::CudaResult,
-    raw::{event::EventWaitFlags, stream::*},
+    raw::{
+        event::EventWaitFlags,
+        memory::{DeviceAccessible, HostAccessible, unified::MemoryAttachFlags},
+        stream::*,
+    },
 };
 
-use super::{device::CudaDevice, event::CudaEvent};
+use super::{
+    device::CudaDevice,
+    event::CudaEvent,
+    memory::{CudaSliceAccess, DeviceRepr},
+};
 
 pub struct CudaStream {
     pub(crate) inner: Stream,
@@ -68,6 +76,19 @@ impl CudaStream {
 
     pub fn wait_event(&self, event: &CudaEvent, flags: EventWaitFlags) -> CudaResult<()> {
         unsafe { wait_event(&self.inner, &event.inner, flags) }
+    }
+
+    pub fn attach_memory_async<Repr, Src>(
+        &self,
+        src: &impl CudaSliceAccess<Repr, Ptr = Src>,
+        length: usize,
+        flags: MemoryAttachFlags,
+    ) -> CudaResult<()>
+    where
+        Repr: DeviceRepr,
+        Src: HostAccessible + DeviceAccessible,
+    {
+        unsafe { attach_memory_async(&self.inner, src.as_ptr(), length, flags) }
     }
 }
 

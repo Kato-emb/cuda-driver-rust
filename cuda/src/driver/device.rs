@@ -66,6 +66,11 @@ impl CudaDevice {
             .map(|v| v == 1)
     }
 
+    pub fn is_pageable_memory_access(&self) -> CudaResult<bool> {
+        self.attribute(DeviceAttribute::PageableMemoryAccess)
+            .map(|v| v == 1)
+    }
+
     // pub fn default_memory_pool(&self) -> CudaResult<> {}
 
     pub fn is_affinity_supported(&self) -> CudaResult<bool> {

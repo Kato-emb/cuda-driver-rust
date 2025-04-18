@@ -11,6 +11,7 @@ use super::{
     context::{Context, green::GreenContext},
     device::Device,
     event::{Event, EventWaitFlags},
+    memory::{DeviceAccessible, HostAccessible, unified::MemoryAttachFlags},
 };
 
 wrap_sys_handle!(Stream, sys::CUstream);
@@ -108,4 +109,17 @@ pub unsafe fn synchronize(stream: &Stream) -> CudaResult<()> {
 
 pub unsafe fn wait_event(stream: &Stream, event: &Event, flags: EventWaitFlags) -> CudaResult<()> {
     unsafe { sys::cuStreamWaitEvent(stream.0, event.0, flags.bits()) }.to_result()
+}
+
+pub unsafe fn attach_memory_async<Ptr>(
+    stream: &Stream,
+    ptr: Ptr,
+    length: usize,
+    flags: MemoryAttachFlags,
+) -> CudaResult<()>
+where
+    Ptr: HostAccessible + DeviceAccessible,
+{
+    unsafe { sys::cuStreamAttachMemAsync(stream.0, ptr.as_device_ptr(), length, flags.bits()) }
+        .to_result()
 }
