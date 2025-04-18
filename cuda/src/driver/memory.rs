@@ -346,6 +346,46 @@ impl<Repr: Align4, Dst: DeviceAccessible> CudaDeviceSliceMut<'_, Repr, Dst> {
     }
 }
 
+impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceSlice<'_, Repr, Ptr> {
+    pub unsafe fn from_raw(ptr: Ptr, len: usize) -> Option<Self> {
+        if let Ok(tmp_ptr) = unsafe {
+            crate::raw::memory::unified::pointer_get_attribute(
+                crate::raw::memory::unified::PointerAttribute::DevicePointer,
+                &ptr,
+            )
+        } {
+            Some(Self {
+                ptr: tmp_ptr,
+                offset: 0,
+                len,
+                _marker: std::marker::PhantomData,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl<Repr: DeviceRepr, Ptr: DeviceAllocated> CudaDeviceSliceMut<'_, Repr, Ptr> {
+    pub unsafe fn from_raw(ptr: Ptr, len: usize) -> Option<Self> {
+        if let Ok(tmp_ptr) = unsafe {
+            crate::raw::memory::unified::pointer_get_attribute(
+                crate::raw::memory::unified::PointerAttribute::DevicePointer,
+                &ptr,
+            )
+        } {
+            Some(Self {
+                ptr: tmp_ptr,
+                offset: 0,
+                len,
+                _marker: std::marker::PhantomData,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CudaHostSlice<'a, Repr: DeviceRepr, Ptr: HostAccessible> {
     ptr: Ptr,
@@ -678,5 +718,20 @@ mod tests {
             slice.byte_size()
         );
         slice.set_d32(u32::MAX).unwrap();
+        let slice = slice.get(100..200).unwrap();
+        let ptr = slice.as_ptr();
+        let len = slice.len();
+
+        let handle = std::thread::spawn(move || {
+            let device = CudaDevice::new(0).unwrap();
+            let ctx = CudaPrimaryContext::new(device).unwrap();
+            ctx.set_current().unwrap();
+
+            let slice = unsafe { CudaDeviceSlice::<u32, _>::from_raw(ptr, len) };
+            assert!(slice.is_some(), "Failed to create CudaDeviceSlice");
+            println!("Slice: {:?}", slice);
+        });
+
+        handle.join().unwrap();
     }
 }
