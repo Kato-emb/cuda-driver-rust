@@ -385,8 +385,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{u8, u16};
-
     use super::*;
     use crate::raw::*;
 
@@ -404,12 +402,24 @@ mod tests {
 
         let (base, size) = unsafe { get_address_range(&ptr) }.unwrap();
         assert!(base.is_some());
-        assert!(size.is_some());
+        assert!(size.is_some_and(|s| s == bytesize));
+
+        let device_ptr = unsafe {
+            unified::pointer_get_attribute::<DevicePtr, _>(
+                unified::PointerAttribute::DevicePointer,
+                &ptr,
+            )
+        }
+        .unwrap();
+
+        assert!(device_ptr.as_device_ptr() != 0);
+        assert_eq!(device_ptr.as_device_ptr(), ptr.as_device_ptr());
 
         unsafe { set_d8_async(&mut ptr, u8::MAX, 1024, &stream) }.unwrap();
         unsafe { set_d16_async(&mut ptr, u16::MAX, 512, &stream) }.unwrap();
         unsafe { set_d32_async(&mut ptr, u32::MAX, 256, &stream) }.unwrap();
 
         unsafe { free_async(ptr, &stream) }.unwrap();
+        unsafe { stream::synchronize(&stream) }.unwrap();
     }
 }

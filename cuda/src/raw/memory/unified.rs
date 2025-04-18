@@ -173,9 +173,9 @@ pub unsafe fn range_get_attribute<T: Sized>(
 
 pub unsafe fn range_get_attributes() {}
 
-pub unsafe fn pointer_get_attribute<T>(
+pub unsafe fn pointer_get_attribute<T, Ptr: DeviceAccessible>(
     attribute: PointerAttribute,
-    device_ptr: &UnifiedDevicePtr,
+    ptr: &Ptr,
 ) -> CudaResult<T> {
     let mut data = std::mem::MaybeUninit::<T>::uninit();
 
@@ -183,7 +183,7 @@ pub unsafe fn pointer_get_attribute<T>(
         sys::cuPointerGetAttribute(
             data.as_mut_ptr() as *mut std::ffi::c_void,
             attribute.into(),
-            device_ptr.0,
+            ptr.as_device_ptr(),
         )
     }
     .to_result()?;
@@ -193,17 +193,54 @@ pub unsafe fn pointer_get_attribute<T>(
 
 pub unsafe fn pointer_get_attributes() {}
 
-pub unsafe fn pointer_set_attribute<T>(
+pub unsafe fn pointer_set_attribute<T, Ptr: DeviceAccessible>(
     value: &T,
     attribute: PointerAttribute,
-    device_ptr: &mut UnifiedDevicePtr,
+    ptr: &mut Ptr,
 ) -> CudaResult<()> {
     unsafe {
         sys::cuPointerSetAttribute(
-            value as *const _ as *const std::ffi::c_void,
+            value as *const T as *const std::ffi::c_void,
             attribute.into(),
-            device_ptr.0,
+            ptr.as_device_ptr(),
         )
     }
     .to_result()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::raw::*;
+
+    #[test]
+    fn test_cuda_raw_memory_unified_alloc() {
+        unsafe { init::init(init::InitFlags::_ZERO) }.unwrap();
+        let device = unsafe { device::get_device(0) }.unwrap();
+        let ctx = unsafe { context::create(context::ContextFlags::SCHED_AUTO, device) }.unwrap();
+        unsafe { context::set_current(&ctx) }.unwrap();
+
+        let size = 1024;
+        let unified_ptr = unsafe { malloc_unified(size, MemoryAttachFlags::GLOBAL) }.unwrap();
+        assert!(unified_ptr.as_device_ptr() != 0);
+
+        let device_ptr = unsafe {
+            pointer_get_attribute::<memory::DevicePtr, _>(
+                PointerAttribute::DevicePointer,
+                &unified_ptr,
+            )
+        }
+        .unwrap();
+
+        assert!(device_ptr.as_device_ptr() != 0);
+        assert!(device_ptr.as_device_ptr() == unified_ptr.as_device_ptr());
+
+        let host_ptr = unsafe {
+            pointer_get_attribute::<memory::HostPtr, _>(PointerAttribute::HostPointer, &unified_ptr)
+        }
+        .unwrap();
+
+        assert!(host_ptr.as_host_ptr() != std::ptr::null_mut());
+        assert!(host_ptr.as_host_ptr() == unified_ptr.as_host_ptr());
+    }
 }
