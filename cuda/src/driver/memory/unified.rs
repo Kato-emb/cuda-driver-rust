@@ -1,5 +1,5 @@
 use crate::{
-    driver::{context::CudaContext, stream::CudaStream},
+    driver::stream::CudaStream,
     error::CudaResult,
     raw::memory::{Location, LocationType, unified::*},
 };
@@ -12,7 +12,11 @@ use super::{
 pub type CudaDeviceUnifiedBuffer<Repr> = CudaDeviceBuffer<Repr, UnifiedDevicePtr>;
 
 impl<Repr: DeviceRepr> CudaDeviceUnifiedBuffer<Repr> {
-    pub fn alloc_unified(len: usize, flags: MemoryAttachFlags) -> CudaResult<Self> {
+    pub fn alloc_unified(len: usize) -> CudaResult<Self> {
+        Self::alloc_unified_with_flags(len, MemoryAttachFlags::GLOBAL)
+    }
+
+    pub fn alloc_unified_with_flags(len: usize, flags: MemoryAttachFlags) -> CudaResult<Self> {
         let bytesize = len.wrapping_div(std::mem::size_of::<Repr>());
         let ptr = unsafe { malloc_unified(bytesize, flags) }?;
 
@@ -21,11 +25,6 @@ impl<Repr: DeviceRepr> CudaDeviceUnifiedBuffer<Repr> {
             size: bytesize,
             _marker: std::marker::PhantomData,
         })
-    }
-
-    pub fn context(&self) -> CudaResult<CudaContext> {
-        let ctx = unsafe { pointer_get_attribute(PointerAttribute::Context, &self.ptr) }?;
-        Ok(CudaContext { inner: ctx })
     }
 }
 
@@ -167,12 +166,11 @@ mod tests {
 
         let stream = CudaStream::new(StreamFlags::NON_BLOCKING).unwrap();
 
-        let mut unified_buffer =
-            CudaDeviceUnifiedBuffer::<u8>::alloc_unified(128, MemoryAttachFlags::GLOBAL).unwrap();
-        let ptr_ctx = unified_buffer.context().unwrap();
-        assert_eq!(ptr_ctx.inner.0, ctx.inner.0);
+        let mut unified_buffer = CudaDeviceUnifiedBuffer::<u8>::alloc_unified(128).unwrap();
 
-        let mut device_slice = unified_buffer.as_mut_slice();
+        let mut device_slice =
+            unsafe { unified_buffer.as_mut_slice().to_device_mut_async(&stream) }.unwrap();
+        stream.synchronize().unwrap();
         device_slice.set_d8(127).unwrap();
         let host_slice = unsafe { device_slice.to_host_mut_async(&stream) }.unwrap();
         stream.synchronize().unwrap();
