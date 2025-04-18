@@ -296,7 +296,8 @@ mod tests {
             context::CudaPrimaryContext,
             device::CudaDevice,
             memory::{
-                CudaSliceAccess, CudaSliceReadable, CudaSliceWritable, pinned::CudaHostPinnedBuffer,
+                CudaDeviceSlice, CudaSliceAccess, CudaSliceReadable, CudaSliceWritable,
+                pinned::CudaHostPinnedBuffer,
             },
         },
         platform::ShareableOsHandle,
@@ -347,6 +348,22 @@ mod tests {
             .import::<u8>(&data, pooled_buffer.as_slice().byte_size())
             .unwrap();
         let imported_slice = imported_buffer.as_slice().get(300..500).unwrap();
+        println!("Imported slice: {:?}", imported_slice);
+        let ptr = imported_slice.as_ptr();
+        let len = imported_slice.len();
+
+        let handle = std::thread::spawn(move || {
+            let device = CudaDevice::new(0).unwrap();
+            let ctx = CudaPrimaryContext::new(device).unwrap();
+            ctx.set_current().unwrap();
+
+            let slice = unsafe { CudaDeviceSlice::<u8, _>::from_raw(ptr, len) };
+            assert!(slice.is_some());
+
+            println!("Slice: {:?}", slice);
+        });
+
+        handle.join().unwrap();
 
         let mut pinned_buffer = CudaHostPinnedBuffer::<u8>::alloc(imported_slice.len()).unwrap();
         pinned_buffer
