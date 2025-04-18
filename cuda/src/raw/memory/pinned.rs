@@ -106,8 +106,11 @@ impl DevicePinned for RegisteredHostPtr {}
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct PinnedFlags: u32 {
+        /// コンテキストを横断して同じポインタを利用可能
         const PORTABLE = 0x01;
+        /// デバイスアドレス空間にマッピング（ゼロコピーアクセス可能）
         const DEVICEMAP = 0x02;
+        /// WC（Write-Combine）領域として確保（高速：CPU書き込み、DMA転送　低速：CPU読み取り）
         const WRITECOMBINED = 0x04;
     }
 }
@@ -121,9 +124,13 @@ bitflags::bitflags! {
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct HostRegisterFlags: u32 {
+        /// コンテキストを横断して同じポインタを利用可能
         const PORTABLE = 0x01;
+        /// デバイスアドレス空間にマッピング（ゼロコピーアクセス可能）
         const DEVICEMAP = 0x02;
+        /// PCI Expressリソースなど、IOメモリ空間として扱われる
         const IOMEMORY = 0x04;
+        /// CPUからの読み取り専用
         const READ_ONLY = 0x08;
     }
 }
