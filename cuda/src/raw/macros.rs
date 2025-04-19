@@ -59,6 +59,17 @@ macro_rules! wrap_sys_enum {
             __Unknown($sys_type),
         }
 
+        impl $enum_name {
+            pub fn as_raw(&self) -> $sys_type {
+                match self {
+                    $(
+                        $enum_name::$variant => <$sys_type>::$sys_variant,
+                    )*
+                    $enum_name::__Unknown(other) => *other,
+                }
+            }
+        }
+
         impl From<$sys_type> for $enum_name {
             fn from(value: $sys_type) -> Self {
                 match value {
@@ -71,12 +82,7 @@ macro_rules! wrap_sys_enum {
 
         impl From<$enum_name> for $sys_type {
             fn from(value: $enum_name) -> Self {
-                match value {
-                    $(
-                        $enum_name::$variant => <$sys_type>::$sys_variant,
-                    )*
-                    $enum_name::__Unknown(other) => other,
-                }
+                value.as_raw()
             }
         }
     };

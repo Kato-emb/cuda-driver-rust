@@ -40,7 +40,7 @@ pub trait UnifiedSlice<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDev
         let count = self.byte_size();
 
         // https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#system-requirements-for-unified-memory
-        if device.is_concurrent_managed_access()? {
+        if device.concurrent_managed_access()? {
             let mut location = Location::default();
             location.0.type_ = LocationType::Host.into();
             location.0.id = 0;
@@ -68,7 +68,7 @@ pub trait UnifiedSlice<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = UnifiedDev
         let device = stream.device()?;
         let count = self.byte_size();
 
-        if device.is_concurrent_managed_access()? {
+        if device.concurrent_managed_access()? {
             let mut location = Location::default();
             location.0.type_ = LocationType::Device.into();
             location.0.id = device.as_raw();
@@ -95,12 +95,18 @@ pub trait UnifiedSliceMut<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = Unified
     where
         Self: Sized,
     {
+        let device = stream.device()?;
         let count = self.byte_size();
-        let mut location = Location::default();
-        location.0.type_ = LocationType::Host.into();
-        location.0.id = 0;
 
-        unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+        if device.concurrent_managed_access()? {
+            let mut location = Location::default();
+            location.0.type_ = LocationType::Host.into();
+            location.0.id = 0;
+
+            unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+        } else {
+            stream.attach_memory_async(&self, count, MemoryAttachFlags::HOST)?;
+        }
 
         Ok(CudaHostSliceMut {
             ptr: self.as_raw_ptr(),
@@ -119,11 +125,16 @@ pub trait UnifiedSliceMut<Repr: DeviceRepr>: CudaSliceAccess<Repr, Ptr = Unified
     {
         let device = stream.device()?;
         let count = self.byte_size();
-        let mut location = Location::default();
-        location.0.type_ = LocationType::Device.into();
-        location.0.id = device.as_raw();
 
-        unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+        if device.concurrent_managed_access()? {
+            let mut location = Location::default();
+            location.0.type_ = LocationType::Device.into();
+            location.0.id = device.as_raw();
+
+            unsafe { prefetch_async(&self.as_ptr(), count, location, &stream.inner) }?;
+        } else {
+            stream.attach_memory_async(&self, count, MemoryAttachFlags::GLOBAL)?;
+        }
 
         Ok(CudaDeviceSliceMut {
             ptr: self.as_raw_ptr(),
@@ -159,10 +170,12 @@ mod tests {
     fn test_cuda_driver_memory_unified_alloc_prefetch() {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
+        if !device.unified_addressing().unwrap() {
+            return;
+        }
+
         let ctx = CudaPrimaryContext::new(device).unwrap();
         ctx.set_current().unwrap();
-
-        println!("{:?}", ctx.device().is_unified_addressing());
 
         let stream = CudaStream::new(StreamFlags::NON_BLOCKING).unwrap();
 

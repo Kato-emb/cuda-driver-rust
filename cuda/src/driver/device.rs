@@ -1,4 +1,12 @@
-use crate::{assert_initialized, error::CudaResult, raw::device::*};
+use std::collections::HashSet;
+
+use crate::{
+    assert_initialized,
+    error::CudaResult,
+    raw::{device::*, memory::AllocationHandleType},
+};
+
+use super::memory::pooled::CudaMemoryPool;
 
 pub struct CudaDevice {
     pub(crate) inner: Device,
@@ -52,7 +60,7 @@ impl CudaDevice {
         unsafe { get_attribute(attr, self.inner) }
     }
 
-    pub fn is_unified_addressing(&self) -> CudaResult<bool> {
+    pub fn unified_addressing(&self) -> CudaResult<bool> {
         self.attribute(DeviceAttribute::UnifiedAddressing)
             .map(|v| v == 1)
     }
@@ -61,20 +69,84 @@ impl CudaDevice {
     /// ### Returns
     /// - `true` : Device can access managed memory concurrently with the CPU.
     /// - `false`: Device cannot access managed memory concurrently with the CPU. Not prefetchable.
-    pub fn is_concurrent_managed_access(&self) -> CudaResult<bool> {
+    pub fn concurrent_managed_access(&self) -> CudaResult<bool> {
         self.attribute(DeviceAttribute::ConcurrentManagedAccess)
             .map(|v| v == 1)
     }
 
-    pub fn is_pageable_memory_access(&self) -> CudaResult<bool> {
+    pub fn pageable_memory_access(&self) -> CudaResult<bool> {
         self.attribute(DeviceAttribute::PageableMemoryAccess)
             .map(|v| v == 1)
     }
 
-    // pub fn default_memory_pool(&self) -> CudaResult<> {}
+    pub fn memory_pool_supported(&self) -> CudaResult<bool> {
+        self.attribute(DeviceAttribute::MemoryPoolsSupported)
+            .map(|v| v == 1)
+    }
 
-    pub fn is_affinity_supported(&self) -> CudaResult<bool> {
+    pub fn virtual_memory_management_supported(&self) -> CudaResult<bool> {
+        self.attribute(DeviceAttribute::VirtualAddressManagementSupported)
+            .map(|v| v == 1)
+    }
+
+    pub fn handle_type_supported(&self, handle_type: AllocationHandleType) -> CudaResult<bool> {
+        match handle_type {
+            AllocationHandleType::None => Ok(true),
+            AllocationHandleType::PosixFD => self
+                .attribute(DeviceAttribute::HandleTypePosixFileDescriptorSupported)
+                .map(|v| v == 1),
+            AllocationHandleType::Win32 => self
+                .attribute(DeviceAttribute::HandleTypeWin32HandleSupported)
+                .map(|v| v == 1),
+            AllocationHandleType::Win32Kmt => self
+                .attribute(DeviceAttribute::HandleTypeWin32KmtHandleSupported)
+                .map(|v| v == 1),
+            AllocationHandleType::Fabric => self
+                .attribute(DeviceAttribute::HandleTypeFabricSupported)
+                .map(|v| v == 1),
+            AllocationHandleType::Max | AllocationHandleType::__Unknown(_) => Ok(false),
+        }
+    }
+
+    pub fn mempool_supported_handle_types(&self) -> CudaResult<HashSet<AllocationHandleType>> {
+        let mut types = HashSet::new();
+
+        let flags = self.attribute(DeviceAttribute::MempoolSupportedHandleTypes)? as u32;
+
+        if flags & AllocationHandleType::PosixFD.as_raw() as u32 != 0 {
+            types.insert(AllocationHandleType::PosixFD);
+        }
+
+        if flags & AllocationHandleType::Win32.as_raw() as u32 != 0 {
+            types.insert(AllocationHandleType::Win32);
+        }
+
+        if flags & AllocationHandleType::Win32Kmt.as_raw() as u32 != 0 {
+            types.insert(AllocationHandleType::Win32Kmt);
+        }
+
+        if flags & AllocationHandleType::Fabric.as_raw() as u32 != 0 {
+            types.insert(AllocationHandleType::Fabric);
+        }
+
+        if types.is_empty() {
+            types.insert(AllocationHandleType::None);
+        }
+
+        Ok(types)
+    }
+
+    pub fn affinity_supported(&self) -> CudaResult<bool> {
         unsafe { get_exec_affinity_support(AffinityType::SmCount, self.inner) }.map(|v| v == 1)
+    }
+
+    pub fn default_memory_pool(&self) -> CudaResult<CudaMemoryPool> {
+        let pool = unsafe { get_mem_pool(&self.inner) }?;
+        Ok(CudaMemoryPool { inner: pool })
+    }
+
+    pub fn set_default_memory_pool(&self, pool: &CudaMemoryPool) -> CudaResult<()> {
+        unsafe { set_mem_pool(&self.inner, &pool.inner) }
     }
 }
 
@@ -152,7 +224,7 @@ mod tests {
     fn test_cuda_driver_device_affinity() {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
-        let result = device.is_affinity_supported();
+        let result = device.affinity_supported();
         assert!(
             result.is_ok(),
             "CUDA device affinity support check failed: {:?}",
