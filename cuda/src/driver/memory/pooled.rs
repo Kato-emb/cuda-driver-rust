@@ -11,7 +11,7 @@ use crate::{
 use super::{CudaDeviceBuffer, DeviceRepr};
 
 pub struct CudaMemoryPool {
-    inner: MemoryPool,
+    pub(crate) inner: MemoryPool,
 }
 
 impl std::fmt::Debug for CudaMemoryPool {
@@ -58,12 +58,18 @@ impl CudaMemoryPool {
 
         #[cfg(target_os = "windows")]
         {
-            props.0.handleTypes = AllocationHandleType::Win32.into();
             let mut sa = Box::new(windows::Win32::Security::SECURITY_ATTRIBUTES::default());
             sa.nLength =
                 std::mem::size_of::<windows::Win32::Security::SECURITY_ATTRIBUTES>() as u32;
-            sa.bInheritHandle = true.into();
-            props.0.win32SecurityAttributes = Box::leak(sa) as *mut _ as *mut std::ffi::c_void;
+            sa.lpSecurityDescriptor = std::ptr::null_mut();
+            sa.bInheritHandle = false.into();
+
+            props.0.handleTypes = AllocationHandleType::None.into();
+            props.0.win32SecurityAttributes = &mut *sa
+                as *mut windows::Win32::Security::SECURITY_ATTRIBUTES
+                as *mut std::ffi::c_void;
+
+            std::mem::forget(sa);
         }
 
         props.0.maxSize = max_size;
@@ -310,12 +316,32 @@ mod tests {
     fn test_cuda_driver_pool() {
         crate::driver::init();
         let device = CudaDevice::new(0).unwrap();
+
+        if !device.memory_pool_supported().unwrap() {
+            return;
+        }
+
         let ctx = CudaPrimaryContext::new(device).unwrap();
         ctx.set_current().unwrap();
 
         let stream = CudaStream::new(StreamFlags::NON_BLOCKING).unwrap();
 
-        let pool = CudaMemoryPool::new(1024 * 1024, ctx.device()).unwrap();
+        println!(
+            "memory pool supported: {:?}",
+            ctx.device().memory_pool_supported()
+        );
+
+        println!(
+            "Memory pool supported: {:?}",
+            ctx.device().default_memory_pool()
+        );
+
+        println!(
+            "Handle type supported bitflags: {:?}",
+            ctx.device().mempool_supported_handle_types()
+        );
+
+        let pool = CudaMemoryPool::new(0, ctx.device()).unwrap();
         println!("Memory pool created: {:?}", pool);
 
         // pool.set_accessibility(ctx.device(), AccessFlags::Read)
