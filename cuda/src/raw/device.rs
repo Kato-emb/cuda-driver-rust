@@ -6,6 +6,7 @@ use crate::error::{CudaResult, ToResult};
 use crate::{wrap_sys_enum, wrap_sys_handle};
 
 use super::context::green::{Resource, ResourceType};
+use super::memory::pooled::MemoryPool;
 
 wrap_sys_handle!(Device, sys::CUdevice);
 
@@ -251,8 +252,15 @@ pub unsafe fn total_mem(device: Device) -> CudaResult<usize> {
     Ok(total as usize)
 }
 
-pub unsafe fn get_mem_pool() {}
-pub unsafe fn set_mem_pool() {}
+pub unsafe fn get_mem_pool(device: &Device) -> CudaResult<MemoryPool> {
+    let mut mem_pool = MaybeUninit::uninit();
+    unsafe { sys::cuDeviceGetDefaultMemPool(mem_pool.as_mut_ptr(), device.0) }.to_result()?;
+
+    Ok(MemoryPool(unsafe { mem_pool.assume_init() }))
+}
+pub unsafe fn set_mem_pool(device: &Device, pool: &MemoryPool) -> CudaResult<()> {
+    unsafe { sys::cuDeviceSetMemPool(device.0, pool.0) }.to_result()
+}
 
 pub unsafe fn get_by_pci_bus_id(pci_bus_id: &str) -> CudaResult<Device> {
     let mut device = 0;
